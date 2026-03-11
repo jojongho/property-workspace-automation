@@ -1,0 +1,239 @@
+{
+  "name": "건축물대장 조회 (Python API v2)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "event": "page-updated-in-database",
+        "databaseId": "a0890e16022e49579d0836faf6d4a2d6",
+        "filters": {
+          "singleCondition": {
+            "field": "조회상태",
+            "condition": "equals",
+            "value": "대기중"
+          }
+        },
+        "options": {}
+      },
+      "id": "notion-trigger-v2",
+      "name": "Notion Trigger",
+      "type": "n8n-nodes-base.notionTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        320
+      ],
+      "webhookId": ""
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst out = [];\n\nconst apiUrl = $env.LEDGER_API_URL || 'http://host.docker.internal:8080/lookup';\nconst apiToken = $env.LEDGER_API_TOKEN || '';\n\nfor (const item of items) {\n  const pageId = item.json.id;\n  const props = item.json.properties || {};\n\n  const address =\n    props['주소']?.rich_text?.[0]?.plain_text ||\n    props['주소']?.title?.[0]?.plain_text ||\n    '';\n\n  if (!address) {\n    out.push({\n      json: {\n        pageId,\n        success: false,\n        error: '주소 속성이 비어 있습니다.'\n      }\n    });\n    continue;\n  }\n\n  try {\n    const headers = { 'Content-Type': 'application/json' };\n    if (apiToken) headers['X-API-Key'] = apiToken;\n\n    const response = await this.helpers.httpRequest({\n      method: 'POST',\n      url: apiUrl,\n      headers,\n      body: {\n        address,\n        force_refresh: false\n      },\n      json: true,\n      timeout: 30000\n    });\n\n    out.push({\n      json: {\n        ...response,\n        pageId,\n        address\n      }\n    });\n  } catch (err) {\n    out.push({\n      json: {\n        pageId,\n        address,\n        success: false,\n        error: err.message || 'lookup api failed'\n      }\n    });\n  }\n}\n\nreturn out;"
+      },
+      "id": "lookup-python-api",
+      "name": "Lookup via Python API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => item.json.success === true);"
+      },
+      "id": "filter-success",
+      "name": "Filter Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().filter((item) => item.json.success !== true);"
+      },
+      "id": "filter-failure",
+      "name": "Filter Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.pageId }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "조회상태",
+              "statusValue": "완료"
+            },
+            {
+              "key": "일반건물여부",
+              "selectValue": "={{ ($json.data?.regstr_kind_name || '').includes('일반') ? '일반건물' : ($json.data?.regstr_kind_name || '미확인') }}"
+            },
+            {
+              "key": "도로명주소",
+              "textValue": "={{ $json.data?.road_address || $json.road_address || '' }}"
+            },
+            {
+              "key": "대지면적",
+              "numberValue": "={{ Number($json.data?.plat_area || 0) }}"
+            },
+            {
+              "key": "건축면적",
+              "numberValue": "={{ Number($json.data?.arch_area || 0) }}"
+            },
+            {
+              "key": "건폐율",
+              "numberValue": "={{ Number($json.data?.bc_ratio || 0) }}"
+            },
+            {
+              "key": "연면적",
+              "numberValue": "={{ Number($json.data?.tot_area || 0) }}"
+            },
+            {
+              "key": "용적률산정연면적",
+              "numberValue": "={{ Number($json.data?.vl_ratio_estm_tot_area || 0) }}"
+            },
+            {
+              "key": "용적률",
+              "numberValue": "={{ Number($json.data?.vl_ratio || 0) }}"
+            },
+            {
+              "key": "구조코드명",
+              "textValue": "={{ $json.data?.structure_name || '' }}"
+            },
+            {
+              "key": "기타구조",
+              "textValue": "={{ $json.data?.etc_structure || '' }}"
+            },
+            {
+              "key": "내진설계여부",
+              "selectValue": "={{ $json.data?.seismic_design_yn || '미확인' }}"
+            },
+            {
+              "key": "내진능력",
+              "textValue": "={{ $json.data?.seismic_ability || '' }}"
+            },
+            {
+              "key": "사용승인일",
+              "dateValue": "={{ $json.data?.use_approval_day ? (String($json.data.use_approval_day).match(/^\\d{8}$/) ? String($json.data.use_approval_day).replace(/(\\d{4})(\\d{2})(\\d{2})/, '$1-$2-$3') : String($json.data.use_approval_day)) : '' }}"
+            }
+          ]
+        }
+      },
+      "id": "notion-update-success",
+      "name": "Notion Update Success",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        980,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.pageId }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "조회상태",
+              "statusValue": "실패"
+            },
+            {
+              "key": "조회오류",
+              "textValue": "={{ $json.error || '건축물대장 조회 실패' }}"
+            }
+          ]
+        }
+      },
+      "id": "notion-update-failure",
+      "name": "Notion Update Failure",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        980,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Notion Trigger": {
+      "main": [
+        [
+          {
+            "node": "Lookup via Python API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup via Python API": {
+      "main": [
+        [
+          {
+            "node": "Filter Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Filter Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Success": {
+      "main": [
+        [
+          {
+            "node": "Notion Update Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Failure": {
+      "main": [
+        [
+          {
+            "node": "Notion Update Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "local"
+  },
+  "pinData": {},
+  "versionId": "v2",
+  "triggerCount": 0,
+  "tags": []
+}

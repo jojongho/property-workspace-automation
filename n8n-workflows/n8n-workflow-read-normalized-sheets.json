@@ -1,0 +1,161 @@
+{
+  "name": "정규화 시트 구조 파악",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1OQyBAJCxdWM1txdfBOXMNxSaGGlF0veafU_Kkp06PWM",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "분양가",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-pricing",
+      "name": "분양가 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TmjNHu09MLmepRce",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1OQyBAJCxdWM1txdfBOXMNxSaGGlF0veafU_Kkp06PWM",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "옵션",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-options",
+      "name": "옵션 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 350],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TmjNHu09MLmepRce",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1OQyBAJCxdWM1txdfBOXMNxSaGGlF0veafU_Kkp06PWM",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "일정",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-schedule",
+      "name": "일정 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TmjNHu09MLmepRce",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1OQyBAJCxdWM1txdfBOXMNxSaGGlF0veafU_Kkp06PWM",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "타입",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-type",
+      "name": "타입 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 650],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TmjNHu09MLmepRce",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "분양가 시트 읽기",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "옵션 시트 읽기",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "일정 시트 읽기",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "타입 시트 읽기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "local"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "triggerCount": 0,
+  "tags": []
+}

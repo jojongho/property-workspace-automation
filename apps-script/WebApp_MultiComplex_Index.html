@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>부동산 통합 매물접수</title>
+  <style>
+    :root {
+      --primary-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      --accent-color: #00c6ff;
+      --text-dark: #2d3436;
+      --bg-light: #f1f2f6;
+    }
+
+    * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, sans-serif; }
+
+    body {
+      margin: 0; padding: 20px;
+      background: var(--bg-light);
+      color: var(--text-dark);
+      display: flex; justify-content: center; align-items: flex-start;
+      min-height: 100vh;
+    }
+
+    .card {
+      width: 100%; max-width: 550px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+    }
+
+    h1 { margin: 0 0 10px; font-size: 26px; text-align: center; background: var(--primary-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px; }
+
+    .step-container { margin-bottom: 25px; }
+    label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 15px; color: #34495e; }
+    
+    select, input, textarea {
+      width: 100%; padding: 15px; border: 2px solid #edf2f7; border-radius: 12px;
+      font-size: 16px; transition: all 0.3s ease; background: #fff;
+    }
+
+    select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent-color); box-shadow: 0 0 0 4px rgba(0, 198, 255, 0.1); }
+
+    .price-info-box {
+      background: #f8f9fa; border-left: 5px solid var(--accent-color);
+      padding: 20px; border-radius: 12px; margin: 20px 0; display: none;
+    }
+
+    .price-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 15px; }
+    .price-val { font-weight: 700; color: #2c3e50; }
+
+    .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px; }
+    .option-item {
+      display: flex; align-items: center; padding: 12px;
+      background: #fff; border: 1px solid #eee; border-radius: 10px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .option-item:hover { background: #f1f9ff; }
+    .option-item input { width: auto; margin-right: 12px; cursor: pointer; }
+
+    .total-section {
+      margin-top: 30px; padding: 25px;
+      background: #2d3436; color: #fff; border-radius: 15px;
+      text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .total-label { font-size: 14px; opacity: 0.8; margin-bottom: 5px; }
+    .total-amount { font-size: 28px; font-weight: 800; color: #00f2fe; }
+
+    button {
+      width: 100%; padding: 18px; margin-top: 25px;
+      border: none; border-radius: 12px;
+      background: var(--primary-gradient); color: white;
+      font-size: 18px; font-weight: 700; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0, 198, 255, 0.3); }
+    button:disabled { background: #cbd5e0; cursor: not-allowed; transform: none; }
+
+    .loader { text-align: center; padding: 20px; color: var(--accent-color); font-weight: 600; }
+    
+    /* 성공 화면 */
+    #successUI { display: none; text-align: center; padding: 20px; }
+    .success-icon { font-size: 60px; color: #2ecc71; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div id="formUI">
+    <h1>🏬 통합 매물접수 & 견적</h1>
+    <p class="subtitle">단지별 분양가 및 옵션 실시간 산출</p>
+
+    <!-- 1단계: 단지/동/호 선택 -->
+    <div class="step-container">
+      <label>아파트 단지 선택</label>
+      <select id="complexSelect" onchange="loadDongs()">
+        <option value="">단지를 선택하세요</option>
+      </select>
+    </div>
+
+    <div class="step-container">
+      <label>동 선택</label>
+      <select id="dongSelect" onchange="loadHos()" disabled>
+        <option value="">동을 선택하세요</option>
+      </select>
+    </div>
+
+    <div class="step-container">
+      <label>호수 선택</label>
+      <select id="hoSelect" onchange="loadDetails()" disabled>
+        <option value="">호를 선택하세요</option>
+      </select>
+    </div>
+
+    <!-- 로딩 표시 -->
+    <div id="miniLoader" class="loader" style="display:none;">데이터 조회 중...</div>
+
+    <!-- 2단계: 자동 산출 정보 표시 -->
+    <div id="priceInfoBox" class="price-info-box">
+      <div class="price-row"><span>단지/타입:</span> <span id="typeDisplay" class="price-val">-</span></div>
+      <div class="price-row"><span>기본 분양가:</span> <span id="basePriceDisplay" class="price-val">0</span> 원</div>
+      <div class="price-row"><span>발코니 확장비:</span> <span id="balconyPriceDisplay" class="price-val">0</span> 원</div>
+      
+      <label style="margin-top:20px;">무상/유상 옵션 선택</label>
+      <div id="optionsGrid" class="options-grid">
+        <!-- 옵션들 동적 생성 -->
+      </div>
+    </div>
+
+    <!-- 3단계: 총액 및 연락처 -->
+    <div id="finalSection" style="display:none;">
+      <div class="total-section">
+        <div class="total-label">예상 총 공급가액 (분양가+발코니+옵션)</div>
+        <div id="totalAmount" class="total-amount">0</div>
+      </div>
+
+      <div class="step-container" style="margin-top:25px;">
+        <label>이름 <span style="color:red">*</span></label>
+        <input type="text" id="userName" placeholder="성함을 입력하세요" required>
+      </div>
+
+      <div class="step-container">
+        <label>연락처 <span style="color:red">*</span></label>
+        <input type="tel" id="userPhone" placeholder="010-0000-0000" required>
+      </div>
+
+      <div class="step-container">
+        <label>메모</label>
+        <textarea id="userMemo" rows="3" placeholder="추가 문의사항을 입력하세요"></textarea>
+      </div>
+
+      <button id="submitBtn" onclick="submitForm()">접수 및 견적 저장하기</button>
+    </div>
+  </div>
+
+  <div id="successUI">
+    <div class="success-icon">✅</div>
+    <h2>접수가 완료되었습니다!</h2>
+    <p>담당자가 확인 후 곧 연락드리겠습니다.</p>
+    <button onclick="location.reload()">새로 작성하기</button>
+  </div>
+</div>
+
+<script>
+  let currentUnitDetail = null;
+
+  // 초기에 단지 리스트 로드
+  window.onload = () => {
+    google.script.run.withSuccessHandler(list => {
+      const sel = document.getElementById('complexSelect');
+      list.forEach(name => sel.add(new Option(name, name)));
+    }).getComplexList();
+  };
+
+  function loadDongs() {
+    const complex = document.getElementById('complexSelect').value;
+    const dongSel = document.getElementById('dongSelect');
+    resetNextSteps('dong');
+    if(!complex) return;
+
+    showLoader(true);
+    google.script.run.withSuccessHandler(list => {
+      list.forEach(d => dongSel.add(new Option(d + '동', d)));
+      dongSel.disabled = false;
+      showLoader(false);
+    }).getDongList(complex);
+  }
+
+  function loadHos() {
+    const complex = document.getElementById('complexSelect').value;
+    const dong = document.getElementById('dongSelect').value;
+    const hoSel = document.getElementById('hoSelect');
+    resetNextSteps('ho');
+    if(!dong) return;
+
+    showLoader(true);
+    google.script.run.withSuccessHandler(list => {
+      list.forEach(h => hoSel.add(new Option(h + '호', h)));
+      hoSel.disabled = false;
+      showLoader(false);
+    }).getHoList(complex, dong);
+  }
+
+  function loadDetails() {
+    const complex = document.getElementById('complexSelect').value;
+    const dong = document.getElementById('dongSelect').value;
+    const ho = document.getElementById('hoSelect').value;
+    if(!ho) return;
+
+    showLoader(true);
+    google.script.run.withSuccessHandler(res => {
+      if(res.success) {
+        currentUnitDetail = res;
+        displayDetails(res);
+      } else {
+        alert(res.message);
+      }
+      showLoader(false);
+    }).getUnitDetails(complex, dong, ho);
+  }
+
+  function displayDetails(res) {
+    document.getElementById('priceInfoBox').style.display = 'block';
+    document.getElementById('finalSection').style.display = 'block';
+    
+    document.getElementById('typeDisplay').innerText = res.unitInfo.type;
+    document.getElementById('basePriceDisplay').innerText = Number(res.unitInfo.basePrice).toLocaleString();
+    document.getElementById('balconyPriceDisplay').innerText = Number(res.unitInfo.balconyPrice).toLocaleString();
+    
+    const grid = document.getElementById('optionsGrid');
+    grid.innerHTML = '';
+    
+    res.options.forEach((opt, idx) => {
+      const div = document.createElement('div');
+      div.className = 'option-item';
+      div.innerHTML = `
+        <input type="checkbox" id="opt_${idx}" value="${opt.price}" onchange="calculateTotal()">
+        <label for="opt_${idx}" style="margin:0; cursor:pointer;">
+          ${opt.name} (${opt.detail}) - <strong>${Number(opt.price).toLocaleString()}원</strong>
+        </label>
+      `;
+      grid.appendChild(div);
+    });
+    
+    calculateTotal();
+  }
+
+  function calculateTotal() {
+    if(!currentUnitDetail) return;
+    
+    let total = Number(currentUnitDetail.unitInfo.basePrice) + Number(currentUnitDetail.unitInfo.balconyPrice);
+    
+    const checkboxes = document.querySelectorAll('#optionsGrid input[type="checkbox"]:checked');
+    checkboxes.forEach(cb => {
+      total += Number(cb.value);
+    });
+    
+    document.getElementById('totalAmount').innerText = total.toLocaleString() + ' 원';
+  }
+
+  function submitForm() {
+    const btn = document.getElementById('submitBtn');
+    const name = document.getElementById('userName').value;
+    const phone = document.getElementById('userPhone').value;
+    
+    if(!name || !phone) { alert('이름과 연락처는 필수입니다.'); return; }
+    
+    btn.disabled = true;
+    btn.innerText = '접수 중...';
+
+    const selectedOptions = Array.from(document.querySelectorAll('#optionsGrid input[type="checkbox"]:checked'))
+      .map(cb => cb.parentElement.innerText.trim());
+
+    const formData = {
+      complex: document.getElementById('complexSelect').value,
+      dong: document.getElementById('dongSelect').value,
+      ho: document.getElementById('hoSelect').value,
+      type: currentUnitDetail.unitInfo.type,
+      basePrice: currentUnitDetail.unitInfo.basePrice,
+      balconyPrice: currentUnitDetail.unitInfo.balconyPrice,
+      selectedOptionsText: selectedOptions.join(' / '),
+      totalAmount: document.getElementById('totalAmount').innerText,
+      name: name,
+      phone: phone,
+      memo: document.getElementById('userMemo').value
+    };
+
+    google.script.run.withSuccessHandler(res => {
+      if(res.success) {
+        document.getElementById('formUI').style.display = 'none';
+        document.getElementById('successUI').style.display = 'block';
+      } else {
+        alert(res.message);
+        btn.disabled = false;
+        btn.innerText = '접수 및 견적 저장하기';
+      }
+    }).submitForm(formData);
+  }
+
+  function resetNextSteps(stage) {
+    if(stage === 'dong') {
+      document.getElementById('dongSelect').innerHTML = '<option value="">동을 선택하세요</option>';
+      document.getElementById('dongSelect').disabled = true;
+    }
+    document.getElementById('hoSelect').innerHTML = '<option value="">호를 선택하세요</option>';
+    document.getElementById('hoSelect').disabled = true;
+    document.getElementById('priceInfoBox').style.display = 'none';
+    document.getElementById('finalSection').style.display = 'none';
+  }
+
+  function showLoader(show) {
+    document.getElementById('miniLoader').style.display = show ? 'block' : 'none';
+  }
+</script>
+
+</body>
+</html>

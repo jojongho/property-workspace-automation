@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 8px;
+      font-size: 24px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 32px;
+      font-size: 14px;
+    }
+
+    .contact-info {
+      text-align: center;
+      margin-bottom: 24px;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .contact-info a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    label .required {
+      color: #e74c3c;
+    }
+
+    select, input, textarea {
+      width: 100%;
+      padding: 14px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    select {
+      cursor: pointer;
+      background: white;
+    }
+
+    .type-display {
+      background: #f8f9fa;
+      padding: 14px;
+      border-radius: 8px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    /* 거래유형 체크박스 스타일 */
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .checkbox-item {
+      flex: 1;
+      min-width: 80px;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      display: none;
+    }
+
+    .checkbox-item label {
+      display: block;
+      padding: 12px 16px;
+      background: #f8f9fa;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .checkbox-item input[type="checkbox"]:checked + label {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-color: #667eea;
+    }
+
+    /* 조건부 가격 필드 */
+    .price-fields {
+      margin-top: 12px;
+    }
+
+    .price-field {
+      display: none;
+      margin-bottom: 12px;
+      padding: 16px;
+      background: #fafafa;
+      border-radius: 8px;
+      animation: slideDown 0.3s ease;
+    }
+
+    .price-field.active {
+      display: block;
+    }
+
+    .price-field label {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 6px;
+    }
+
+    .price-field input {
+      background: white;
+    }
+
+    .rent-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .rent-row > div {
+      flex: 1;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* 파일 업로드 스타일 */
+    .file-upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: #fafafa;
+    }
+
+    .file-upload-area:hover,
+    .file-upload-area.dragover {
+      border-color: #667eea;
+      background: #f0f4ff;
+    }
+
+    .file-upload-area .icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    .file-upload-area p {
+      margin: 0;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .file-upload-area .hint {
+      font-size: 12px;
+      color: #999;
+      margin-top: 8px;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    /* 파일 미리보기 */
+    .file-preview-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .file-preview-item {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e0e0e0;
+    }
+
+    .file-preview-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .file-preview-item .file-icon {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f5f5f5;
+      font-size: 24px;
+    }
+
+    .file-preview-item .file-name {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      font-size: 10px;
+      padding: 2px 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-preview-item .remove-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      background: rgba(255,0,0,0.8);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 버튼 */
+    button[type="submit"] {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button[type="submit"]:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button[type="submit"]:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .success-message {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .success-message h2 {
+      color: #27ae60;
+      margin-bottom: 16px;
+    }
+
+    .success-message p {
+      color: #666;
+    }
+
+    .error-message {
+      background: #fee;
+      color: #c00;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    /* 진행 상태 표시 */
+    .progress-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .progress-overlay.active {
+      display: flex;
+    }
+
+    .progress-box {
+      background: white;
+      padding: 30px 40px;
+      border-radius: 16px;
+      text-align: center;
+    }
+
+    .progress-box .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏢 우방아이유쉘 매물접수</h1>
+    <p class="subtitle">배방 2단지</p>
+
+    <div class="contact-info">
+      전화로 주셔도 됩니다!!! (누르면 전화연결)<br>
+      <a href="tel:010-8282-8684">010-8282-8684</a> ·
+      <a href="tel:010-6587-4949">010-6587-4949</a>
+    </div>
+
+    <div id="loading" class="loading">
+      데이터 로딩 중...
+    </div>
+
+    <form id="mainForm" style="display: none;">
+      <!-- 동 선택 -->
+      <div class="form-group">
+        <label>동 <span class="required">*</span></label>
+        <select id="dongSelect" required>
+          <option value="">몇 동</option>
+        </select>
+      </div>
+
+      <!-- 호 선택 -->
+      <div class="form-group">
+        <label>호 <span class="required">*</span></label>
+        <select id="hoSelect" required disabled>
+          <option value="">몇 호</option>
+        </select>
+      </div>
+
+      <!-- 타입 표시 -->
+      <div class="form-group">
+        <label>타입</label>
+        <div id="typeDisplay" class="type-display">동/호 선택 시 자동 표시</div>
+      </div>
+
+      <!-- 연락처 -->
+      <div class="form-group">
+        <label>연락처 <span class="required">*</span></label>
+        <input type="tel" id="phoneInput" placeholder="010-0000-0000" required>
+      </div>
+
+      <!-- 거래유형 (복수선택) -->
+      <div class="form-group">
+        <label>거래유형 <span class="required">*</span></label>
+        <p style="font-size:12px; color:#888; margin:0 0 10px 0;">매매, 전세, 월세 동시 진행 시 중복선택 가능</p>
+        <div class="checkbox-group">
+          <div class="checkbox-item">
+            <input type="checkbox" id="typeSale" value="매매">
+            <label for="typeSale">매매</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="typeJeonse" value="전세">
+            <label for="typeJeonse">전세</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="typeRent" value="월세">
+            <label for="typeRent">월세</label>
+          </div>
+        </div>
+
+        <!-- 조건부 가격 필드 -->
+        <div class="price-fields">
+          <div id="salePriceField" class="price-field">
+            <label>매매가</label>
+            <input type="text" id="salePrice" placeholder="매매일 경우 매매가(3억 8천)">
+          </div>
+          <div id="jeonsePriceField" class="price-field">
+            <label>전세가</label>
+            <input type="text" id="jeonsePrice" placeholder="전세일 경우 전세가(3억 8천)">
+          </div>
+          <div id="rentPriceField" class="price-field">
+            <label>월세</label>
+            <div class="rent-row">
+              <div>
+                <input type="text" id="deposit" placeholder="보증금(2000)">
+              </div>
+              <div>
+                <input type="text" id="monthlyRent" placeholder="월(100)">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 참고사항 -->
+      <div class="form-group">
+        <label>참고사항</label>
+        <textarea id="memoInput" rows="4" placeholder="옵션, 입주가능일, 이사계획, 가격조절 여부, 희망사항 등등 아무거나"></textarea>
+      </div>
+
+      <!-- 파일 업로드 -->
+      <div class="form-group">
+        <label>사진 이나 동영상</label>
+        <p style="font-size:12px; color:#667eea; margin:0 0 10px 0;">광고, 블로그, 유튜브 등등 참고해서 최대한 빨리 빼드립니다</p>
+        <div class="file-upload-area" id="dropZone">
+          <div class="icon">📁</div>
+          <p>클릭하거나 파일을 여기에 끌어다 놓으세요</p>
+          <p class="hint">여러 파일 선택 가능</p>
+        </div>
+        <input type="file" id="fileInput" multiple>
+        <div class="file-preview-container" id="filePreview"></div>
+      </div>
+
+      <div id="errorMsg" class="error-message" style="display: none;"></div>
+
+      <button type="submit" id="submitBtn">접수 →</button>
+    </form>
+
+    <div id="successMessage" class="success-message" style="display: none;">
+      <h2>✅ 접수 완료!</h2>
+      <p>매물 접수가 완료되었습니다.<br>빠른 시일 내에 연락드리겠습니다.</p>
+      <button onclick="location.reload()" style="margin-top:20px; padding:12px 24px; background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white; border:none; border-radius:8px; cursor:pointer;">새로운 접수하기</button>
+    </div>
+  </div>
+
+  <!-- 진행 상태 오버레이 -->
+  <div class="progress-overlay" id="progressOverlay">
+    <div class="progress-box">
+      <div class="spinner"></div>
+      <p id="progressText">접수 중...</p>
+    </div>
+  </div>
+
+  <script>
+    let dongHoData = {};
+    let selectedFiles = [];
+
+    // 페이지 로드 시 데이터 가져오기
+    document.addEventListener('DOMContentLoaded', function() {
+      google.script.run
+        .withSuccessHandler(onDataLoaded)
+        .withFailureHandler(onError)
+        .getDongHoData();
+
+      initFileUpload();
+      initTransactionTypeHandlers();
+    });
+
+    // 데이터 로드 완료
+    function onDataLoaded(data) {
+      dongHoData = data;
+
+      const dongSelect = document.getElementById('dongSelect');
+      data.dongList.forEach(dong => {
+        const option = document.createElement('option');
+        option.value = dong;
+        option.textContent = dong + '동';
+        dongSelect.appendChild(option);
+      });
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('mainForm').style.display = 'block';
+    }
+
+    // 동 선택 변경
+    document.getElementById('dongSelect').addEventListener('change', function() {
+      const dong = this.value;
+      const hoSelect = document.getElementById('hoSelect');
+      const typeDisplay = document.getElementById('typeDisplay');
+
+      hoSelect.innerHTML = '';
+
+      if (!dong) {
+        hoSelect.disabled = true;
+        hoSelect.innerHTML = '<option value="">몇 호</option>';
+        typeDisplay.textContent = '동/호 선택 시 자동 표시';
+        return;
+      }
+
+      hoSelect.disabled = false;
+      hoSelect.innerHTML = '<option value="">몇 호</option>';
+
+      const hoList = dongHoData.dongHoMap[dong] || [];
+      hoList.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.ho;
+        option.dataset.type = item.type;
+        option.textContent = item.ho + '호 (' + item.type + ')';
+        hoSelect.appendChild(option);
+      });
+
+      typeDisplay.textContent = '호를 선택하면 타입이 표시됩니다';
+    });
+
+    // 호 선택 변경
+    document.getElementById('hoSelect').addEventListener('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      const typeDisplay = document.getElementById('typeDisplay');
+
+      if (selectedOption && selectedOption.dataset.type) {
+        typeDisplay.textContent = '타입: ' + selectedOption.dataset.type;
+      } else {
+        typeDisplay.textContent = '호를 선택하면 타입이 표시됩니다';
+      }
+    });
+
+    // 거래유형 체크박스 핸들러
+    function initTransactionTypeHandlers() {
+      const checkboxes = document.querySelectorAll('.checkbox-group input[type="checkbox"]');
+      checkboxes.forEach(cb => {
+        cb.addEventListener('change', updatePriceFields);
+      });
+    }
+
+    function updatePriceFields() {
+      const salePriceField = document.getElementById('salePriceField');
+      const jeonsePriceField = document.getElementById('jeonsePriceField');
+      const rentPriceField = document.getElementById('rentPriceField');
+
+      salePriceField.classList.toggle('active', document.getElementById('typeSale').checked);
+      jeonsePriceField.classList.toggle('active', document.getElementById('typeJeonse').checked);
+      rentPriceField.classList.toggle('active', document.getElementById('typeRent').checked);
+    }
+
+    // 파일 업로드 초기화
+    function initFileUpload() {
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('fileInput');
+
+      // 클릭으로 파일 선택
+      dropZone.addEventListener('click', () => fileInput.click());
+
+      // 드래그 앤 드롭
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+      });
+
+      // 파일 선택
+      fileInput.addEventListener('change', () => {
+        handleFiles(fileInput.files);
+      });
+    }
+
+    // 파일 처리
+    function handleFiles(files) {
+      Array.from(files).forEach(file => {
+        // 중복 체크
+        if (selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+          return;
+        }
+        selectedFiles.push(file);
+      });
+      updateFilePreview();
+    }
+
+    // 파일 미리보기 업데이트
+    function updateFilePreview() {
+      const preview = document.getElementById('filePreview');
+      preview.innerHTML = '';
+
+      selectedFiles.forEach((file, index) => {
+        const item = document.createElement('div');
+        item.className = 'file-preview-item';
+
+        if (file.type.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(file);
+          item.appendChild(img);
+        } else {
+          const icon = document.createElement('div');
+          icon.className = 'file-icon';
+          icon.textContent = getFileIcon(file.type);
+          item.appendChild(icon);
+        }
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'file-name';
+        nameDiv.textContent = file.name;
+        item.appendChild(nameDiv);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-btn';
+        removeBtn.textContent = '×';
+        removeBtn.onclick = (e) => {
+          e.stopPropagation();
+          selectedFiles.splice(index, 1);
+          updateFilePreview();
+        };
+        item.appendChild(removeBtn);
+
+        preview.appendChild(item);
+      });
+    }
+
+    function getFileIcon(mimeType) {
+      if (mimeType.includes('pdf')) return '📄';
+      if (mimeType.includes('video')) return '🎬';
+      if (mimeType.includes('audio')) return '🎵';
+      return '📎';
+    }
+
+    // 파일을 base64로 변환
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result.split(',')[1];
+          resolve({
+            name: file.name,
+            mimeType: file.type,
+            data: base64
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // 폼 제출
+    document.getElementById('mainForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      // 거래유형 체크 확인
+      const transactionTypes = [];
+      if (document.getElementById('typeSale').checked) transactionTypes.push('매매');
+      if (document.getElementById('typeJeonse').checked) transactionTypes.push('전세');
+      if (document.getElementById('typeRent').checked) transactionTypes.push('월세');
+
+      if (transactionTypes.length === 0) {
+        showError('거래유형을 하나 이상 선택해주세요.');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      const progressOverlay = document.getElementById('progressOverlay');
+      const progressText = document.getElementById('progressText');
+
+      submitBtn.disabled = true;
+      progressOverlay.classList.add('active');
+      hideError();
+
+      try {
+        // 파일 변환
+        progressText.textContent = '파일 처리 중...';
+        const fileData = await Promise.all(selectedFiles.map(fileToBase64));
+
+        const hoSelect = document.getElementById('hoSelect');
+        const selectedOption = hoSelect.options[hoSelect.selectedIndex];
+
+        const formData = {
+          dong: document.getElementById('dongSelect').value,
+          ho: document.getElementById('hoSelect').value,
+          type: selectedOption ? selectedOption.dataset.type : '',
+          phone: document.getElementById('phoneInput').value,
+          transactionTypes: transactionTypes,
+          salePrice: document.getElementById('salePrice').value,
+          jeonsePrice: document.getElementById('jeonsePrice').value,
+          deposit: document.getElementById('deposit').value,
+          monthlyRent: document.getElementById('monthlyRent').value,
+          memo: document.getElementById('memoInput').value,
+          files: fileData
+        };
+
+        progressText.textContent = '서버로 전송 중...';
+
+        google.script.run
+          .withSuccessHandler(onSubmitSuccess)
+          .withFailureHandler(onSubmitError)
+          .submitForm(formData);
+
+      } catch (error) {
+        onSubmitError(error);
+      }
+    });
+
+    function onSubmitSuccess(result) {
+      const progressOverlay = document.getElementById('progressOverlay');
+      progressOverlay.classList.remove('active');
+
+      if (result.success) {
+        document.getElementById('mainForm').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'block';
+      } else {
+        onSubmitError(result.message);
+      }
+    }
+
+    function onSubmitError(error) {
+      const submitBtn = document.getElementById('submitBtn');
+      const progressOverlay = document.getElementById('progressOverlay');
+
+      progressOverlay.classList.remove('active');
+      submitBtn.disabled = false;
+      showError(typeof error === 'string' ? error : error.message || '오류가 발생했습니다.');
+    }
+
+    function showError(message) {
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.textContent = message;
+      errorMsg.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('errorMsg').style.display = 'none';
+    }
+
+    function onError(error) {
+      document.getElementById('loading').textContent = '데이터 로드 실패: ' + error;
+    }
+  </script>
+</body>
+</html>

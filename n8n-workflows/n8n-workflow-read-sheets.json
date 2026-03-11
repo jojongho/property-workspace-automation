@@ -1,0 +1,161 @@
+{
+  "name": "매물관리 시스템 - 시트 구조 파악",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1tkDKc7RTCLRgYPM-6e3CFEBOsHckLlNmddfKlVUX2rQ",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "등록검색",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-registration-sheet",
+      "name": "등록검색 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-oauth",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1tkDKc7RTCLRgYPM-6e3CFEBOsHckLlNmddfKlVUX2rQ",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "매물DB",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-property-db",
+      "name": "매물DB 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 350],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-oauth",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1tkDKc7RTCLRgYPM-6e3CFEBOsHckLlNmddfKlVUX2rQ",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "고객DB",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-customer-db",
+      "name": "고객DB 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-oauth",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetId": {
+          "__rl": true,
+          "value": "1tkDKc7RTCLRgYPM-6e3CFEBOsHckLlNmddfKlVUX2rQ",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "아파트단지",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read-apartment-complex",
+      "name": "아파트단지 시트 읽기",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [450, 650],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "google-sheets-oauth",
+          "name": "Google Sheets Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "등록검색 시트 읽기",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "매물DB 시트 읽기",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "고객DB 시트 읽기",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "아파트단지 시트 읽기",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "local"
+  },
+  "pinData": {},
+  "versionId": "1",
+  "triggerCount": 0,
+  "tags": []
+}
