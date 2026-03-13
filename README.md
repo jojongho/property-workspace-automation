@@ -1,66 +1,72 @@
-# Building Ledger Automation
+# Property Workspace Automation
 
-건축물대장 자동조회 전용 standalone 저장소입니다. `n8n`은 트리거와 오케스트레이션만 담당하고, 핵심 조회 로직은 이 저장소의 FastAPI 서비스가 담당합니다.
+Google Sheets, Google Drive, Apps Script 기반의 부동산 운영 자동화 전용 standalone 저장소다.
 
-## Included
+현재 이 저장소는 다음 작업을 중심으로 구성한다.
 
-- `src/building_ledger_api/`: FastAPI 서비스
-- `scripts/lookup_once.py`: 단건 CLI 테스트
-- `n8n-workflows/`: n8n 워크플로우와 가이드
-- `apps-script/`: 기존 Apps Script 자산
-- `notes/`: 시행착오와 운영 메모
+- 분리된 매물 스프레드시트의 Drive 폴더 자동 생성
+- 중앙 Apps Script 프로젝트 배포/동기화
+- 기존 Drive 폴더 구조 마이그레이션
+- Apps Script 운영용 웹앱 및 등록 스크립트 보관
+
+공공데이터포털 건축물대장 API나 FastAPI 서버 코드는 이 저장소에서 제거했다.
+
+## Structure
+
+```text
+property-workspace-automation/
+├── apps-script/
+│   ├── property-folder-automation/
+│   ├── property-registration/
+│   ├── webapp-dongho/
+│   ├── webapp-multi-complex/
+│   └── archive/
+├── docs/
+│   └── apps-script/
+├── scripts/
+├── Makefile
+└── README.md
+```
+
+## Main Files
+
+- `apps-script/property-folder-automation/g-drive-folder-create.js`
+- `apps-script/property-folder-automation/g-drive-folder.js`
+- `apps-script/property-folder-automation/appsscript.json`
+- `scripts/gws_push_apps_script_project.py`
+- `scripts/gws_export_apps_script_project.py`
+- `scripts/gws_analyze_property_folder.py`
+- `scripts/backfill_property_folder_links.py`
+- `scripts/migrate_drive_folder_tree.py`
+- `scripts/cleanup_empty_legacy_drive_folders.py`
 
 ## Quick Start
 
 ```bash
-cd /Users/cao25/Projects/building-ledger-automation
-cp .env.example .env
-make install
-make run
+cd /Users/cao25/Projects/property-workspace-automation
+gws auth login
+make check
 ```
 
-기본 서버: `http://localhost:8080`
+이 저장소는 상시 실행하는 서버가 없다. 대부분의 작업은 Apps Script 배포 또는 운영 스크립트 실행으로 끝난다.
 
-## Commands
+## Common Commands
 
-- `make install`
-- `make run`
 - `make check`
-- `make lookup ADDRESS='충청남도 천안시 서북구 불당동 1329'`
+- `python3 scripts/gws_push_apps_script_project.py --script-id <SCRIPT_ID> --verify`
+- `python3 scripts/gws_export_apps_script_project.py --script-id <SCRIPT_ID> --output-dir /tmp/exported-apps-script`
+- `python3 scripts/gws_analyze_property_folder.py --folder-id <FOLDER_ID>`
+- `python3 scripts/backfill_property_folder_links.py --canonical-sheet 건물 --row-start 2 --row-end 60`
+- `python3 scripts/migrate_drive_folder_tree.py --summary-only`
+- `python3 scripts/cleanup_empty_legacy_drive_folders.py`
 
-## API
+## Docs
 
-### Health Check
-
-```bash
-curl http://localhost:8080/health
-```
-
-### Lookup
-
-```bash
-curl -X POST http://localhost:8080/lookup \
-  -H 'Content-Type: application/json' \
-  -d '{"address":"충청남도 천안시 서북구 불당동 1329"}'
-```
-
-`LEDGER_API_TOKEN`을 설정한 경우 `X-API-Key` 헤더가 필요합니다.
-
-## n8n Integration Pattern
-
-1. Notion Trigger 또는 Webhook Trigger로 조회 요청을 받습니다.
-2. HTTP Request 노드에서 `POST /lookup`을 호출합니다.
-3. 응답값을 Notion 또는 Google Sheets 업데이트 노드에 매핑합니다.
-4. 성공 시 `조회상태=완료`, 실패 시 `조회상태=실패`로 기록합니다.
+- `docs/apps-script/folder-automation.md`
+- `apps-script/README.md`
 
 ## Notes
 
-- 이 저장소는 이미 standalone repo이므로 별도 export 스크립트는 신규 워크플로우에 사용하지 않습니다.
-- 운영 경로 문서는 `projects/...`를 전제하지 않습니다.
-
-## Critical Rules
-
-1. 엔드포인트는 `BldRgstHubService/getBrTitleInfo`를 사용합니다.
-2. 파라미터는 `sigungu_code`, `bdong_code`, `plat_code`, `bun`, `ji`를 사용합니다.
-3. PNU는 반드시 19자리로 검증합니다.
-4. 구형 `BldRgstService_v2`와 혼용하지 않습니다.
+- `gws` CLI 인증이 선행돼야 한다.
+- Apps Script 대량 복구는 편집기 실행보다 로컬 Python 스크립트를 우선 사용한다.
+- 기존 Drive 폴더 데이터 이동은 삭제가 아니라 부모 변경과 병합 방식으로 처리한다.

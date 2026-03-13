@@ -2,26 +2,24 @@ PYTHON ?= python3
 VENV ?= .venv
 PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
-UVICORN := $(VENV)/bin/uvicorn
 
-.PHONY: venv install run check lookup clean
+.PHONY: venv install check run clean
 
 venv:
 	@test -d $(VENV) || $(PYTHON) -m venv $(VENV)
 
 install: venv
 	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
-
-run: install
-	$(UVICORN) building_ledger_api.main:app --app-dir src --host $${HOST:-0.0.0.0} --port $${PORT:-8080} --reload
+	@if [ -s requirements.txt ]; then $(PIP) install -r requirements.txt; fi
 
 check: install
-	$(PY) -m compileall src scripts
+	$(PY) -m py_compile scripts/*.py
+	node --check apps-script/property-folder-automation/g-drive-folder-create.js
+	node --check apps-script/property-folder-automation/g-drive-folder.js
 
-lookup: install
-	@test -n "$(ADDRESS)" || (echo "ADDRESS is required. Example: make lookup ADDRESS='충청남도 천안시 서북구 불당동 1329'" && exit 1)
-	$(PY) scripts/lookup_once.py --address "$(ADDRESS)"
+run:
+	@echo "No persistent server in this repo."
+	@echo "Use Apps Script deployment helpers or migration scripts directly."
 
 clean:
 	rm -rf $(VENV)

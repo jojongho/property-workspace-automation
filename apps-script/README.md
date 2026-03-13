@@ -1,131 +1,62 @@
-# Apps Script 디렉토리
+# Apps Script Assets
 
-Google Sheets 기반 매물관리 자동화를 위한 Apps Script 파일들입니다.
+부동산 운영 자동화에 쓰는 Apps Script 소스를 기능별로 분리해 둔 디렉토리다.
 
-## 📁 디렉토리 구조
+## Layout
 
-```
+```text
 apps-script/
-├── 통합_최종_스크립트_v2_개선.js  # 메인 매물관리 스크립트
-├── option.js                      # 옵션 데이터 관리 스크립트
-├── archive/                       # 레거시 스크립트 보관
-│   ├── README.md
-│   └── 통합_최종_스크립트.js
-└── README.md                      # 이 파일
+├── property-folder-automation/
+│   ├── appsscript.json
+│   ├── g-drive-folder-create.js
+│   └── g-drive-folder.js
+├── property-registration/
+├── webapp-dongho/
+├── webapp-multi-complex/
+└── archive/
 ```
 
-## 🚀 현재 사용 중인 스크립트
+## Main Directories
 
-### 1. **통합_최종_스크립트_v2_개선.js** (메인)
+### `property-folder-automation/`
 
-**역할**: 매물/고객 등록 및 관리 자동화
+분리된 AppSheet 매물 스프레드시트들의 Drive 폴더를 중앙 Apps Script 프로젝트 하나에서 관리하는 코드다.
 
-**주요 기능**:
-- ✅ 하이브리드 ID 생성 (수식 미리보기 → 영구 저장)
-- ✅ 매물/고객 등록 인터페이스 (`등록검색` 시트)
-- ✅ 자동 데이터 불러오기 (onEdit 트리거)
-- ✅ 필수 필드 검증 강화
-- ✅ 중복 등록 방지
-- ✅ Google Drive 폴더 자동 생성 및 링크
+핵심 파일:
 
-**설치 방법**:
-1. Google Sheets에서 **확장프로그램 > Apps Script** 열기
-2. 파일 내용 전체 복사하여 붙여넣기
-3. 저장 후 권한 승인
-4. 트리거 설정 (onEdit, onOpen)
+- `g-drive-folder-create.js`
+- `g-drive-folder.js`
+- `appsscript.json`
 
-**상수 설정**:
-```javascript
-const ROOT_FOLDER_ID = '1Y0x3HGO1_xB35RJfA6NRE_DL5TOczUpi'; // 아파트 폴더 ID
-```
+주요 운영 함수:
 
-### 2. **option.js** (옵션 관리)
+- `setupManagedSpreadsheetTriggers()`
+- `listManagedSpreadsheetTriggers()`
+- `resetManagedSpreadsheetTriggers()`
+- `backfillManagedSpreadsheetFolders()`
+- `continueBuildingSheetBackfill()`
+- `continueRetailSheetBackfill()`
 
-**역할**: 외부 통합단지DB에서 옵션 데이터 가져오기
+상세 운영 문서:
 
-**주요 기능**:
-- ✅ 타입별 옵션 필터링
-  - 정확 일치 (예: "84A")
-  - 전체 타입 (예: "전체")
-  - 다중 타입 (예: "84A, 84B")
-- ✅ 발코니확장 자동 제외
-- ✅ 체크박스 UI 자동 생성
-- ✅ 금액 만 단위 변환 및 표시
-- ✅ 옵션구분별 셀 병합
+- `../docs/apps-script/folder-automation.md`
 
-**사용 방법**:
-1. Apps Script 에디터에 별도 파일로 추가
-2. `등록검색` 시트 B1에 통합단지DB ID 입력
-3. C4(단지명), C7(타입) 입력 후 메뉴에서 "옵션 데이터 가져오기" 실행
+### `property-registration/`
 
-**외부 연동**:
-- 통합단지DB: `1XY35_z3bIIzSmD6LMK_ygM6l_ZG7_KAuXxuo0YD-c_0`
-- 옵션 시트 컬럼: A(단지명), B(옵션구분), C(타입), G(금액), H(내역)
+매물 등록, 옵션 불러오기, 통합 등록 스크립트 보관용 디렉토리다.
 
-## 🔧 개발 가이드
+### `webapp-dongho/`
 
-### 로컬 개발
-Apps Script는 Google 클라우드 기반이므로 로컬 개발 시:
-1. 파일 수정: VS Code에서 `.js` 파일 편집
-2. 배포: 복사하여 Apps Script 에디터에 붙여넣기
-3. 테스트: Google Sheets에서 직접 실행
+동/호 선택 기반 고객 접수 웹앱 자산이다.
 
-### 트리거 설정
-```javascript
-// 자동 실행 트리거 예시
-function setupTriggers() {
-  // 시트 수정 시 자동 실행
-  ScriptApp.newTrigger('onEdit')
-    .forSpreadsheet(SpreadsheetApp.getActive())
-    .onEdit()
-    .create();
-}
-```
+### `webapp-multi-complex/`
 
-### 디버깅
-```javascript
-// 로그 확인: Apps Script 에디터 > 실행 로그
-Logger.log('디버그 메시지: ' + 변수);
+다중 단지 매물 접수 웹앱 자산이다.
 
-// 사용자 알림
-SpreadsheetApp.getUi().alert('메시지');
-```
+### `archive/`
 
-## 📝 주요 셀 위치 (등록검색 시트)
+더 이상 운영하지 않는 레거시 스크립트 보관소다.
 
-| 셀 | 내용 | 용도 |
-|----|------|------|
-| B1 | 통합단지DB ID | 외부 스프레드시트 연동 |
-| C3 | 신규/수정 모드 | 등록 모드 자동 판별 |
-| C4 | 단지명 | 매물/옵션 검색 키 |
-| C5 | 동 | 매물 검색 키 |
-| C6 | 호 | 매물 검색 키 |
-| C7 | 타입 | 옵션 필터링 키 |
-| C28 | 매물ID | 하이브리드 ID (수식 → 영구값) |
-| C36 | 고객ID | 하이브리드 ID (수식 → 영구값) |
-| E5:H | 옵션 데이터 | option.js로 채워짐 |
+## Deployment Note
 
-## 🗂️ 아카이브 관리
-
-더 이상 사용하지 않는 스크립트는 `archive/` 폴더로 이동합니다.
-
-**아카이브 정책**:
-- 보관 기간: 최소 6개월
-- 삭제 조건: 새 버전 안정화 후 6개월 경과 시
-- 복원 방법: `archive/` 폴더에서 파일 복사
-
-**현재 아카이브**:
-- `통합_최종_스크립트.js` (2025-10-05) - v2_개선으로 대체
-
-## 🚨 주의사항
-
-1. **ID 생성 방식 변경 금지**: 하이브리드 ID 시스템은 과거 데이터 호환성 유지
-2. **시트 구조 변경 시**: 셀 위치 참조 코드 모두 확인
-3. **외부 DB 연동**: 통합단지DB 구조 변경 시 option.js 수정 필요
-4. **트리거 관리**: onEdit 트리거는 1개만 유지 (중복 실행 방지)
-
-## 📚 관련 문서
-
-- [../README.md](../README.md) - 저장소 개요
-- [../notes/](../notes/) - 개발 메모 및 운영 기록
-- [../n8n-workflows/](../n8n-workflows/) - 연동 워크플로우와 가이드
+로컬에서 Apps Script 파일을 수정한 뒤 중앙 프로젝트에 반영할 때는 `scripts/gws_push_apps_script_project.py`를 사용한다.
