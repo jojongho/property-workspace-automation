@@ -495,11 +495,12 @@ function resolveApartmentComplexFolder_(시군구, 동읍면, 통반리, 지번,
     return matchedFolder;
   }
 
-  if (!String(지번 || '').trim()) {
-    return null;
+  var folderName = String(단지명 || '').trim();
+  if (String(지번 || '').trim()) {
+    folderName = String(지번 || '').trim() + ' ' + folderName;
   }
 
-  var createdFolder = getOrCreateFolder(parentFolder, String(지번 || '').trim() + ' ' + String(단지명 || '').trim());
+  var createdFolder = getOrCreateFolder(parentFolder, folderName);
   if (spreadsheet) {
     registerApartmentComplexFolderInLookup_(loadApartmentComplexFolderCache_(spreadsheet), data, createdFolder);
   }
@@ -661,7 +662,7 @@ function createFolderFromWebhookData_(sheetName, data) {
   var resolvedSheetName = resolveConfiguredSheetName_(sheetName);
 
   if (resolvedSheetName === '아파트매물') {
-    assertRequiredFields_(data, [HEADER.시군구, HEADER.동읍면, HEADER.지번, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입]);
+    assertRequiredFields_(data, [HEADER.시군구, HEADER.동읍면, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입]);
     return createApartmentFolderStructure(
       data.시군구,
       data.동읍면,
@@ -1213,8 +1214,8 @@ function handleApartmentEdit_(e) {
   const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const colIndex = (name) => header.indexOf(name) + 1; // 1-based
 
-  // 필수값: 시군구, 동읍면, 지번, 단지명, 동, 호, 타입 모두 필요
-  const requiredHeaders = [HEADER.시군구, HEADER.동읍면, HEADER.지번, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입];
+  // 필수값: 시군구, 동읍면, 단지명, 동, 호, 타입 필요
+  const requiredHeaders = [HEADER.시군구, HEADER.동읍면, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입];
   for (var i = 0; i < requiredHeaders.length; i++) {
     if (colIndex(requiredHeaders[i]) < 1) return; // 필수 헤더 없으면 중단
   }
@@ -1252,7 +1253,7 @@ function handleApartmentEdit_(e) {
     );
   }
 
-  var hasAllRequired = values.시군구 && values.동읍면 && values.지번 && values.단지명 && values.동 && values.호 && values.타입;
+  var hasAllRequired = values.시군구 && values.동읍면 && values.단지명 && values.동 && values.호 && values.타입;
   if (!hasAllRequired) return;
 
   // 이미 폴더 정보가 있으면 건너뜀
@@ -1287,8 +1288,8 @@ function handleApartmentEdit_(e) {
 function handleApartmentRow_(sheet, rowNum, header) {
   const colIndex = (name) => header.indexOf(name) + 1;
   
-  // 필수값: 시군구, 동읍면, 지번, 단지명, 동, 호, 타입 모두 필요
-  const requiredHeaders = [HEADER.시군구, HEADER.동읍면, HEADER.지번, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입];
+  // 필수값: 시군구, 동읍면, 단지명, 동, 호, 타입 필요
+  const requiredHeaders = [HEADER.시군구, HEADER.동읍면, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입];
   for (var i = 0; i < requiredHeaders.length; i++) {
     if (colIndex(requiredHeaders[i]) < 1) return;
   }
@@ -1323,7 +1324,7 @@ function handleApartmentRow_(sheet, rowNum, header) {
     );
   }
   
-  var hasAllRequired = values.시군구 && values.동읍면 && values.지번 && values.단지명 && values.동 && values.호 && values.타입;
+  var hasAllRequired = values.시군구 && values.동읍면 && values.단지명 && values.동 && values.호 && values.타입;
   if (!hasAllRequired) return;
   
   if (rowValues[urlCol - 1]) return; // 이미 URL이 있으면 건너뜀
@@ -2382,7 +2383,7 @@ function backfillApartmentSheet_(sheet) {
     const colIndex = (name) => header.indexOf(name) + 1;
 
     // 헤더 확인 및 로깅
-    const req = [HEADER.시군구, HEADER.동읍면, HEADER.지번, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입];
+    const req = [HEADER.시군구, HEADER.동읍면, HEADER.단지명, HEADER.동, HEADER.호, HEADER.타입];
     var missingHeaders = [];
     for (var i = 0; i < req.length; i++) {
       if (colIndex(req[i]) < 1) {
@@ -2452,7 +2453,7 @@ function backfillApartmentSheet_(sheet) {
         );
       }
       
-      var ok = 시군구 && 동읍면 && 지번 && 단지명 && 동 && 호 && 타입;
+      var ok = 시군구 && 동읍면 && 단지명 && 동 && 호 && 타입;
       
       if (!ok) {
         skippedByMissingData++;
@@ -2461,7 +2462,6 @@ function backfillApartmentSheet_(sheet) {
           var missingFields = [];
           if (!시군구) missingFields.push('시군구');
           if (!동읍면) missingFields.push('동읍면');
-          if (!지번) missingFields.push('지번');
           if (!단지명) missingFields.push('단지명');
           if (!동) missingFields.push('동');
           if (!호) missingFields.push('호');
@@ -2541,7 +2541,7 @@ function backfillApartmentComplexSheet_(sheet) {
     const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
     const header = data[0];
     const colIndex = (name) => header.indexOf(name) + 1;
-    const req = [HEADER.시군구, HEADER.동읍면, HEADER.지번, HEADER.단지명];
+    const req = [HEADER.시군구, HEADER.동읍면, HEADER.단지명];
     var missingHeaders = [];
 
     for (var i = 0; i < req.length; i++) {

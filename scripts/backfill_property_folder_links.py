@@ -566,11 +566,9 @@ def create_apartment_complex_folder(
     if not folder:
         folder = find_existing_apartment_complex_folder(client, parent["id"], data)
 
-    if not folder and not jibun:
-        return None
-
     if not folder:
-        folder = client.get_or_create_folder(parent["id"], f"{jibun} {complex_name}")
+        folder_name = f"{jibun} {complex_name}".strip() if jibun else complex_name
+        folder = client.get_or_create_folder(parent["id"], folder_name)
 
     register_apartment_complex_lookup(apartment_lookup, data, folder)
     return folder
