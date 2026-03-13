@@ -22,7 +22,7 @@
  * scripts/backfill_property_folder_links.py 를 우선 사용한다.
  */
 const PROJECT_CONFIG = {
-  managedSheets: ['아파트매물', '주택타운', '건물', '상가', '원투룸', '토지', '공장창고'],
+  managedSheets: ['아파트매물', '아파트단지', '주택타운', '건물', '상가', '원투룸', '토지', '공장창고'],
   webhookSheetName: '아파트매물',
   buildingInfoSpreadsheetId: '1XLzFUR5yRaop74f-1tRva0TMckO1NQ2zG4p2P4-UY_E',
   buildingInfoSheetName: '건물',

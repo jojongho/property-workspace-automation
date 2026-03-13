@@ -28,6 +28,8 @@ const HEADER = {
   통반리: '통반리',
   지번: '지번',
   단지명: '단지명',
+  단지명축약: '단지명축약',
+  단지ID: '단지ID',
   주택단지: '주택단지',      // 주택타운용
   주택유형: '주택유형',      // 주택타운용
   건물명: '건물명',          // 건물/상가/원투룸용
@@ -64,7 +66,7 @@ const COLUMN_POSITIONS_LEGACY = {
 };
 
 const DEFAULT_PROJECT_CONFIG = {
-  managedSheets: ['아파트매물', '주택타운', '건물', '상가', '원투룸', '토지', '공장창고'],
+  managedSheets: ['아파트매물', '아파트단지', '주택타운', '건물', '상가', '원투룸', '토지', '공장창고'],
   webhookSheetName: SHEET_NAME,
   buildingInfoSpreadsheetId: '',
   buildingInfoSheetName: '건물',
@@ -73,6 +75,7 @@ const DEFAULT_PROJECT_CONFIG = {
 };
 
 const BUILDING_INFO_CACHE = {};
+const APARTMENT_COMPLEX_FOLDER_CACHE = {};
 
 function columnLetterToIndex_(letter) {
   var col = 0;
@@ -108,6 +111,7 @@ function sanitizeStringArray_(values, fallbackValues) {
 
 const SHEET_HANDLER_MAP = {
   '아파트매물': { edit: handleApartmentEdit_, row: handleApartmentRow_, backfill: backfillApartmentSheet_ },
+  '아파트단지': { edit: handleApartmentComplexEdit_, row: handleApartmentComplexRow_, backfill: backfillApartmentComplexSheet_ },
   '주택타운': { edit: handleTownEdit_, row: handleTownRow_, backfill: backfillTownSheet_ },
   '건물': { edit: handleBuildingEdit_, row: handleBuildingRow_, backfill: backfillBuildingSheet_ },
   '상가': { edit: handleBuildingEdit_, row: handleBuildingRow_, backfill: backfillBuildingSheet_ },
@@ -220,6 +224,286 @@ function resolveMissingJibunFromSheetData_(sheet, header, rowNum, rowValues, mat
   }
 
   return '';
+}
+
+function normalizeFolderMatchToken_(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^0-9a-z가-힣]/g, '');
+}
+
+function buildApartmentComplexLookupKey_(data) {
+  var parts = [
+    normalize시군구(data.시군구 || ''),
+    String(data.동읍면 || '').trim(),
+    String(data.통반리 || '').trim(),
+    String(data.지번 || '').trim(),
+    String(data.단지명 || '').trim()
+  ];
+  return parts.join('::');
+}
+
+function buildApartmentComplexNameKey_(data) {
+  return normalizeFolderMatchToken_(data.단지명 || '');
+}
+
+function getSheetByCanonicalName_(spreadsheet, canonicalSheetName) {
+  if (!spreadsheet) return null;
+
+  var sheets = spreadsheet.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (resolveConfiguredSheetName_(sheets[i].getName()) === canonicalSheetName) {
+      return sheets[i];
+    }
+  }
+
+  return null;
+}
+
+function parseDriveFolderId_(value) {
+  var raw = String(value || '').trim();
+  if (!raw) return '';
+
+  var urlMatch = raw.match(/[-\w]{25,}/);
+  return urlMatch ? urlMatch[0] : '';
+}
+
+function resolveApartmentComplexFolderFromLeafFolderId_(leafFolderId) {
+  var parsedId = parseDriveFolderId_(leafFolderId);
+  if (!parsedId) return null;
+
+  try {
+    var leafFolder = DriveApp.getFolderById(parsedId);
+    var saleParents = leafFolder.getParents();
+    if (!saleParents.hasNext()) return null;
+
+    var saleFolder = saleParents.next();
+    if (saleFolder.getName() !== '-매물') return null;
+
+    var complexParents = saleFolder.getParents();
+    if (!complexParents.hasNext()) return null;
+
+    return complexParents.next();
+  } catch (error) {
+    Logger.log('아파트 단지 폴더 역추적 실패: ' + error);
+    return null;
+  }
+}
+
+function registerApartmentComplexFolderInLookup_(lookup, data, folder) {
+  if (!folder || !data) return;
+
+  var folderId = folder.getId ? folder.getId() : String(folder.id || '');
+  if (!folderId) return;
+
+  var nameKey = buildApartmentComplexNameKey_(data);
+  if (nameKey) {
+    lookup['단지명::' + nameKey] = folderId;
+  }
+
+  if (data.단지ID) {
+    lookup['단지ID::' + String(data.단지ID).trim()] = folderId;
+  }
+
+  var locationKey = buildApartmentComplexLookupKey_(data);
+  if (locationKey.replace(/:/g, '')) {
+    lookup['주소::' + locationKey] = folderId;
+  }
+}
+
+function loadApartmentComplexFolderCache_(spreadsheet) {
+  if (!spreadsheet) return {};
+
+  var cacheKey = spreadsheet.getId();
+  if (APARTMENT_COMPLEX_FOLDER_CACHE[cacheKey]) {
+    return APARTMENT_COMPLEX_FOLDER_CACHE[cacheKey];
+  }
+
+  var lookup = {};
+  var complexSheet = getSheetByCanonicalName_(spreadsheet, '아파트단지');
+  if (complexSheet && complexSheet.getLastRow() >= 2) {
+    var complexData = complexSheet.getDataRange().getValues();
+    var complexHeader = complexData[0];
+    for (var r = 1; r < complexData.length; r++) {
+      var complexRow = complexData[r];
+      var folderId = getRowValueByHeader_(complexRow, complexHeader, HEADER.폴더ID)
+        || getRowValueByHeader_(complexRow, complexHeader, HEADER.관련파일);
+      var complexFolderId = parseDriveFolderId_(folderId);
+      if (!complexFolderId) continue;
+
+      registerApartmentComplexFolderInLookup_(
+        lookup,
+        {
+          시군구: getRowValueByHeader_(complexRow, complexHeader, HEADER.시군구),
+          동읍면: getRowValueByHeader_(complexRow, complexHeader, HEADER.동읍면),
+          통반리: getRowValueByHeader_(complexRow, complexHeader, HEADER.통반리),
+          지번: getRowValueByHeader_(complexRow, complexHeader, HEADER.지번),
+          단지명: getRowValueByHeader_(complexRow, complexHeader, HEADER.단지명),
+          단지ID: getRowValueByHeader_(complexRow, complexHeader, HEADER.단지ID)
+        },
+        { id: complexFolderId }
+      );
+    }
+  }
+
+  var apartmentSheet = getSheetByCanonicalName_(spreadsheet, '아파트매물');
+  if (apartmentSheet && apartmentSheet.getLastRow() >= 2) {
+    var apartmentData = apartmentSheet.getDataRange().getValues();
+    var apartmentHeader = apartmentData[0];
+    for (var i = 1; i < apartmentData.length; i++) {
+      var apartmentRow = apartmentData[i];
+      var leafFolderId = getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.폴더ID)
+        || getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.관련파일);
+      var complexFolder = resolveApartmentComplexFolderFromLeafFolderId_(leafFolderId);
+      if (!complexFolder) continue;
+
+      registerApartmentComplexFolderInLookup_(
+        lookup,
+        {
+          시군구: getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.시군구),
+          동읍면: getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.동읍면),
+          통반리: getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.통반리),
+          지번: getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.지번),
+          단지명: getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.단지명),
+          단지ID: getRowValueByHeader_(apartmentRow, apartmentHeader, HEADER.단지ID)
+        },
+        complexFolder
+      );
+    }
+  }
+
+  APARTMENT_COMPLEX_FOLDER_CACHE[cacheKey] = lookup;
+  return lookup;
+}
+
+function findApartmentComplexFolderFromSheetCache_(spreadsheet, data) {
+  if (!spreadsheet) return null;
+
+  var lookup = loadApartmentComplexFolderCache_(spreadsheet);
+  var folderId = '';
+
+  var nameKey = buildApartmentComplexNameKey_(data);
+  if (nameKey) {
+    folderId = lookup['단지명::' + nameKey] || '';
+  }
+
+  if (!folderId && data.단지ID) {
+    folderId = lookup['단지ID::' + String(data.단지ID).trim()] || '';
+  }
+
+  if (!folderId) {
+    folderId = lookup['주소::' + buildApartmentComplexLookupKey_(data)] || '';
+  }
+
+  if (!folderId) return null;
+
+  try {
+    return DriveApp.getFolderById(folderId);
+  } catch (error) {
+    Logger.log('아파트 단지 캐시 폴더 조회 실패: ' + error);
+    return null;
+  }
+}
+
+function scoreApartmentComplexFolderCandidate_(candidateName, data) {
+  var trimmedCandidate = String(candidateName || '').trim();
+  var exactTarget = String(data.지번 || '').trim() + ' ' + String(data.단지명 || '').trim();
+  var exactComplexOnly = String(data.단지명 || '').trim();
+  var normalizedCandidate = normalizeFolderMatchToken_(trimmedCandidate);
+  var normalizedTarget = normalizeFolderMatchToken_(exactTarget);
+  var normalizedComplex = normalizeFolderMatchToken_(data.단지명 || '');
+  var normalizedShort = normalizeFolderMatchToken_(data.단지명축약 || '');
+  var normalizedJibun = normalizeFolderMatchToken_(data.지번 || '');
+
+  if (trimmedCandidate === exactTarget) return 100;
+  if (trimmedCandidate === exactComplexOnly) return 95;
+  if (normalizedCandidate === normalizedTarget && normalizedTarget) return 90;
+  if (normalizedCandidate === normalizedComplex && normalizedComplex) return 80;
+  if (normalizedShort && normalizedCandidate === normalizedShort) return 60;
+  if (normalizedCandidate && normalizedJibun && normalizedComplex &&
+      normalizedCandidate.indexOf(normalizedJibun) !== -1 &&
+      normalizedCandidate.indexOf(normalizedComplex) !== -1) {
+    return 70;
+  }
+
+  return 0;
+}
+
+function findExistingApartmentComplexFolderUnderParent_(parentFolder, data) {
+  if (!parentFolder) return null;
+
+  var folders = parentFolder.getFolders();
+  var bestFolder = null;
+  var bestScore = 0;
+  var duplicateScoreCount = 0;
+
+  while (folders.hasNext()) {
+    var candidate = folders.next();
+    var score = scoreApartmentComplexFolderCandidate_(candidate.getName(), data);
+    if (!score) continue;
+
+    if (score > bestScore) {
+      bestFolder = candidate;
+      bestScore = score;
+      duplicateScoreCount = 1;
+    } else if (score === bestScore) {
+      duplicateScoreCount++;
+    }
+  }
+
+  if (!bestFolder) return null;
+  if (duplicateScoreCount > 1 && bestScore < 90) return null;
+
+  return bestFolder;
+}
+
+function getApartmentParentFolder_(시군구, 동읍면, 통반리) {
+  var rootFolder = getRootFolder_();
+  var normalized시군구 = normalize시군구(시군구);
+  var 시군구Folder = getOrCreateFolder(rootFolder, normalized시군구);
+  var 동읍면Folder = getOrCreateFolder(시군구Folder, 동읍면);
+  var parentFolder = 동읍면Folder;
+
+  if (통반리 && String(통반리).trim() !== '') {
+    parentFolder = getOrCreateFolder(동읍면Folder, 통반리);
+  }
+
+  return parentFolder;
+}
+
+function resolveApartmentComplexFolder_(시군구, 동읍면, 통반리, 지번, 단지명, options) {
+  var parentFolder = getApartmentParentFolder_(시군구, 동읍면, 통반리);
+  var data = {
+    시군구: 시군구,
+    동읍면: 동읍면,
+    통반리: 통반리 || '',
+    지번: 지번,
+    단지명: 단지명,
+    단지명축약: options && options.단지명축약 ? options.단지명축약 : '',
+    단지ID: options && options.단지ID ? options.단지ID : ''
+  };
+  var spreadsheet = options && options.spreadsheet ? options.spreadsheet : null;
+
+  var cachedFolder = findApartmentComplexFolderFromSheetCache_(spreadsheet, data);
+  if (cachedFolder) return cachedFolder;
+
+  var matchedFolder = findExistingApartmentComplexFolderUnderParent_(parentFolder, data);
+  if (matchedFolder) {
+    if (spreadsheet) {
+      registerApartmentComplexFolderInLookup_(loadApartmentComplexFolderCache_(spreadsheet), data, matchedFolder);
+    }
+    return matchedFolder;
+  }
+
+  if (!String(지번 || '').trim()) {
+    return null;
+  }
+
+  var createdFolder = getOrCreateFolder(parentFolder, String(지번 || '').trim() + ' ' + String(단지명 || '').trim());
+  if (spreadsheet) {
+    registerApartmentComplexFolderInLookup_(loadApartmentComplexFolderCache_(spreadsheet), data, createdFolder);
+  }
+  return createdFolder;
 }
 
 function processLatestPendingRowInSheet_(sheet) {
@@ -386,7 +670,11 @@ function createFolderFromWebhookData_(sheetName, data) {
       data.단지명,
       data.동,
       data.호,
-      data.타입
+      data.타입,
+      {
+        단지명축약: data.단지명축약 || '',
+        단지ID: data.단지ID || ''
+      }
     );
   }
 
@@ -885,6 +1173,10 @@ function backfillApartmentSheetFolders() {
   return backfillManagedSheetRange_('아파트매물', 2);
 }
 
+function backfillApartmentComplexSheetFolders() {
+  return backfillManagedSheetRange_('아파트단지', 2, 120);
+}
+
 function backfillTownSheetFolders() {
   return backfillManagedSheetRange_('주택타운', 2);
 }
@@ -943,6 +1235,7 @@ function handleApartmentEdit_(e) {
     통반리: colIndex(HEADER.통반리) > 0 ? getVal(HEADER.통반리) : '',
     지번:   getVal(HEADER.지번),
     단지명: getVal(HEADER.단지명),
+    단지ID: colIndex(HEADER.단지ID) > 0 ? getVal(HEADER.단지ID) : '',
     동: getVal(HEADER.동),
     호: getVal(HEADER.호),
     타입: getVal(HEADER.타입)
@@ -976,7 +1269,11 @@ function handleApartmentEdit_(e) {
     values.단지명,
     values.동,
     values.호,
-    values.타입
+    values.타입,
+    {
+      spreadsheet: sheet.getParent(),
+      단지ID: values.단지ID
+    }
   );
 
   // 결과 기록
@@ -1009,6 +1306,7 @@ function handleApartmentRow_(sheet, rowNum, header) {
     통반리: colIndex(HEADER.통반리) > 0 ? getVal(HEADER.통반리) : '',
     지번:   getVal(HEADER.지번),
     단지명: getVal(HEADER.단지명),
+    단지ID: colIndex(HEADER.단지ID) > 0 ? getVal(HEADER.단지ID) : '',
     동: getVal(HEADER.동),
     호: getVal(HEADER.호),
     타입: getVal(HEADER.타입)
@@ -1038,9 +1336,75 @@ function handleApartmentRow_(sheet, rowNum, header) {
     values.단지명,
     values.동,
     values.호,
-    values.타입
+    values.타입,
+    {
+      spreadsheet: sheet.getParent(),
+      단지ID: values.단지ID
+    }
   );
   
+  sheet.getRange(rowNum, urlCol).setValue(folder.url);
+  if (idCol > 0) sheet.getRange(rowNum, idCol).setValue(folder.id);
+}
+
+/**
+ * 아파트단지 편집 처리
+ */
+function handleApartmentComplexEdit_(e) {
+  const sheet = e.range.getSheet();
+  if (resolveConfiguredSheetName_(sheet.getName()) !== '아파트단지') return;
+  const editedRow = e.range.getRow();
+  if (editedRow === 1) return;
+
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  handleApartmentComplexRow_(sheet, editedRow, header);
+}
+
+/**
+ * 아파트단지 특정 행 처리
+ */
+function handleApartmentComplexRow_(sheet, rowNum, header) {
+  const colIndex = (name) => header.indexOf(name) + 1;
+  const requiredHeaders = [HEADER.시군구, HEADER.동읍면, HEADER.단지명];
+  for (var i = 0; i < requiredHeaders.length; i++) {
+    if (colIndex(requiredHeaders[i]) < 1) return;
+  }
+
+  const ensured = ensureResultColumnsForRelatedFile_(sheet, header);
+  const urlCol = ensured.urlCol;
+  const idCol = ensured.idCol;
+  if (urlCol < 1) return;
+
+  const rowValues = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const getVal = (name) => rowValues[colIndex(name) - 1];
+
+  const values = {
+    시군구: getVal(HEADER.시군구),
+    동읍면: getVal(HEADER.동읍면),
+    통반리: colIndex(HEADER.통반리) > 0 ? getVal(HEADER.통반리) : '',
+    지번: getVal(HEADER.지번),
+    단지명: getVal(HEADER.단지명),
+    단지명축약: colIndex(HEADER.단지명축약) > 0 ? getVal(HEADER.단지명축약) : '',
+    단지ID: colIndex(HEADER.단지ID) > 0 ? getVal(HEADER.단지ID) : ''
+  };
+
+  if (!values.시군구 || !values.동읍면 || !values.단지명) return;
+  if (rowValues[urlCol - 1]) return;
+
+  const folder = createApartmentComplexFolderStructure(
+    values.시군구,
+    values.동읍면,
+    values.통반리 || '',
+    values.지번,
+    values.단지명,
+    {
+      spreadsheet: sheet.getParent(),
+      단지명축약: values.단지명축약,
+      단지ID: values.단지ID
+    }
+  );
+  if (!folder) return;
+
   sheet.getRange(rowNum, urlCol).setValue(folder.url);
   if (idCol > 0) sheet.getRange(rowNum, idCol).setValue(folder.id);
 }
@@ -1555,28 +1919,36 @@ function handleFactoryRow_(sheet, rowNum, header) {
   if (idCol > 0) sheet.getRange(rowNum, idCol).setValue(folder.id);
 }
 
+function createApartmentComplexFolderStructure(시군구, 동읍면, 통반리, 지번, 단지명, options) {
+  const 단지Folder = resolveApartmentComplexFolder_(
+    시군구,
+    동읍면,
+    통반리,
+    지번,
+    단지명,
+    options || {}
+  );
+
+  if (!단지Folder) return null;
+
+  return {
+    url: 단지Folder.getUrl(),
+    id: 단지Folder.getId()
+  };
+}
+
 /**
  * 아파트 폴더 구조 생성
  */
-function createApartmentFolderStructure(시군구, 동읍면, 통반리, 지번, 단지명, 동, 호, 타입) {
-  const rootFolder = getRootFolder_();
-
-  // 1단계: 시군구 폴더 (정규화 적용: 지정 지역 외는 "타지역"으로 매핑)
-  const normalized시군구 = normalize시군구(시군구);
-  const 시군구Folder = getOrCreateFolder(rootFolder, normalized시군구);
-
-  // 2단계: 동읍면 폴더
-  const 동읍면Folder = getOrCreateFolder(시군구Folder, 동읍면);
-
-  // 3단계: 통반리 폴더 (통반리 정보가 있을 때만 생성)
-  let 부모Folder = 동읍면Folder;
-
-  if (통반리 && 통반리.trim() !== '') {
-    부모Folder = getOrCreateFolder(동읍면Folder, 통반리);
-  }
-
-  // 4단계: 지번 단지명 폴더
-  const 단지Folder = getOrCreateFolder(부모Folder, `${지번} ${단지명}`);
+function createApartmentFolderStructure(시군구, 동읍면, 통반리, 지번, 단지명, 동, 호, 타입, options) {
+  const 단지Folder = resolveApartmentComplexFolder_(
+    시군구,
+    동읍면,
+    통반리,
+    지번,
+    단지명,
+    options || {}
+  );
 
   // 5단계: 매물 폴더 (고정, 하이픈으로 시작하여 정렬 시 맨 앞에 위치)
   const 매물Folder = getOrCreateFolder(단지Folder, '-매물');
@@ -2063,6 +2435,7 @@ function backfillApartmentSheet_(sheet) {
       const 동읍면 = row[colIndex(HEADER.동읍면) - 1];
       var 지번 = row[colIndex(HEADER.지번) - 1];
       const 단지명 = row[colIndex(HEADER.단지명) - 1];
+      const 단지ID = colIndex(HEADER.단지ID) > 0 ? row[colIndex(HEADER.단지ID) - 1] : '';
       const 동 = row[colIndex(HEADER.동) - 1];
       const 호 = row[colIndex(HEADER.호) - 1];
       const 타입 = row[colIndex(HEADER.타입) - 1];
@@ -2111,7 +2484,11 @@ function backfillApartmentSheet_(sheet) {
         단지명,
         동,
         호,
-        타입
+        타입,
+        {
+          spreadsheet: sheet.getParent(),
+          단지ID: 단지ID
+        }
       );
       
       updatesUrl.push([folder.url]);
@@ -2141,6 +2518,91 @@ function backfillApartmentSheet_(sheet) {
     
     Logger.log('완료: ' + targetRows.length + '개 행에 폴더 정보를 기록했습니다.');
     
+  } catch (error) {
+    Logger.log('오류 발생: ' + error.toString());
+    Logger.log(error.stack);
+  }
+}
+
+/**
+ * 아파트단지 일괄 보정
+ */
+function backfillApartmentComplexSheet_(sheet) {
+  try {
+    Logger.log('아파트단지 시트 처리 시작');
+
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2) {
+      Logger.log('경고: 데이터 행이 없습니다. (lastRow: ' + lastRow + ')');
+      return;
+    }
+
+    const data = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+    const header = data[0];
+    const colIndex = (name) => header.indexOf(name) + 1;
+    const req = [HEADER.시군구, HEADER.동읍면, HEADER.지번, HEADER.단지명];
+    var missingHeaders = [];
+
+    for (var i = 0; i < req.length; i++) {
+      if (colIndex(req[i]) < 1) {
+        missingHeaders.push(req[i]);
+      }
+    }
+
+    if (missingHeaders.length > 0) {
+      Logger.log('오류: 필수 헤더가 없습니다: ' + missingHeaders.join(', '));
+      return;
+    }
+
+    const ensured = ensureResultColumnsForRelatedFile_(sheet, header);
+    const urlCol = ensured.urlCol;
+    const idCol = ensured.idCol;
+    const targetRows = [];
+    const updatesUrl = [];
+    const updatesId = [];
+
+    for (var r = 2; r <= lastRow; r++) {
+      const row = data[r - 1];
+      if (row[urlCol - 1]) continue;
+
+      const values = {
+        시군구: row[colIndex(HEADER.시군구) - 1],
+        동읍면: row[colIndex(HEADER.동읍면) - 1],
+        통반리: colIndex(HEADER.통반리) > 0 ? row[colIndex(HEADER.통반리) - 1] : '',
+        지번: row[colIndex(HEADER.지번) - 1],
+        단지명: row[colIndex(HEADER.단지명) - 1],
+        단지명축약: colIndex(HEADER.단지명축약) > 0 ? row[colIndex(HEADER.단지명축약) - 1] : '',
+        단지ID: colIndex(HEADER.단지ID) > 0 ? row[colIndex(HEADER.단지ID) - 1] : ''
+      };
+
+      if (!values.시군구 || !values.동읍면 || !values.단지명) continue;
+
+      const folder = createApartmentComplexFolderStructure(
+        values.시군구,
+        values.동읍면,
+        values.통반리 || '',
+        values.지번,
+        values.단지명,
+        {
+          spreadsheet: sheet.getParent(),
+          단지명축약: values.단지명축약,
+          단지ID: values.단지ID
+        }
+      );
+      if (!folder) continue;
+
+      targetRows.push(r);
+      updatesUrl.push([folder.url]);
+      updatesId.push([folder.id]);
+    }
+
+    for (var j = 0; j < targetRows.length; j++) {
+      sheet.getRange(targetRows[j], urlCol).setValue(updatesUrl[j][0]);
+      if (idCol > 0) sheet.getRange(targetRows[j], idCol).setValue(updatesId[j][0]);
+    }
+
+    Logger.log('완료: ' + targetRows.length + '개 행에 아파트단지 폴더 정보를 기록했습니다.');
   } catch (error) {
     Logger.log('오류 발생: ' + error.toString());
     Logger.log(error.stack);
@@ -2785,12 +3247,37 @@ function backfillFactorySheet_(sheet) {
  * 
  * 이 구조는 AppSheet에서 "Regenerate Structure" 실행 후 스키마와 완벽히 일치합니다.
  */
+function ensureAppendedResultColumns_(sheet, headerRow) {
+  var header = headerRow || sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var urlCol = header.indexOf(HEADER.관련파일) + 1;
+  var idCol = header.indexOf(HEADER.폴더ID) + 1;
+  var nextCol = header.length + 1;
+
+  if (urlCol < 1) {
+    urlCol = nextCol;
+    sheet.getRange(1, urlCol).setValue(HEADER.관련파일);
+    nextCol = urlCol + 1;
+  }
+
+  if (idCol < 1) {
+    idCol = nextCol;
+    sheet.getRange(1, idCol).setValue(HEADER.폴더ID);
+  }
+
+  return { urlCol: urlCol, idCol: idCol };
+}
+
 function ensureResultColumnsForRelatedFile_(sheet, headerRow) {
   var header = headerRow || sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var sheetName = sheet.getName();
+  var canonicalSheetName = resolveConfiguredSheetName_(sheetName);
+
+  if (canonicalSheetName === '아파트단지') {
+    return ensureAppendedResultColumns_(sheet, header);
+  }
 
   // ✅ 매물 시트가 아닌 경우 제외 (고객DB, 고정값, 건물정보 등)
-  var excludedSheets = ['고객DB', '고객정보', '고정값', '건물정보', '아파트단지', '매물지도', '대시보드', '통계', '통합DB'];
+  var excludedSheets = ['고객DB', '고객정보', '고정값', '건물정보', '매물지도', '대시보드', '통계', '통합DB'];
   if (excludedSheets.indexOf(sheetName) !== -1) {
     Logger.log('[' + sheetName + '] 시트는 폴더 관리 대상이 아니므로 건너뜀');
     return { urlCol: 0, idCol: 0 };

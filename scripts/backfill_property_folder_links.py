@@ -26,6 +26,7 @@ class SheetSpec:
 
 SHEET_SPECS = [
     SheetSpec("1s6i-fFhQgKRSmowMtnmO4dIx-3BpPauMSN1e7hezmEQ", "아파트", "아파트매물"),
+    SheetSpec("1s6i-fFhQgKRSmowMtnmO4dIx-3BpPauMSN1e7hezmEQ", "아파트단지", "아파트단지"),
     SheetSpec("1V3PVwVRFbHbrOu2JKlE1xlDVCosHy08hPUeX5HojYoU", "주택", "주택타운"),
     SheetSpec("1XLzFUR5yRaop74f-1tRva0TMckO1NQ2zG4p2P4-UY_E", "건물", "건물"),
     SheetSpec("1XLzFUR5yRaop74f-1tRva0TMckO1NQ2zG4p2P4-UY_E", "상가", "상가"),
@@ -39,6 +40,8 @@ class GoogleApiClient:
     def __init__(self) -> None:
         self.access_token = self._mint_access_token()
         self.folder_cache: dict[tuple[str, str], dict[str, str]] = {}
+        self.file_cache: dict[tuple[str, str], dict] = {}
+        self.child_folder_cache: dict[str, list[dict]] = {}
 
     def _extract_json(self, text: str) -> dict:
         lines = [line for line in text.splitlines() if line and not line.startswith("Using keyring backend:")]
@@ -165,6 +168,41 @@ class GoogleApiClient:
         self.folder_cache[cache_key] = result
         return result
 
+    def get_drive_file(self, file_id: str, fields: str = "id,name,parents,webViewLink") -> dict:
+        cache_key = (file_id, fields)
+        cached = self.file_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        url = (
+            f"https://www.googleapis.com/drive/v3/files/{file_id}"
+            f"?supportsAllDrives=true&fields={urllib.parse.quote(fields, safe=',')}"
+        )
+        result = self.request("GET", url)
+        self.file_cache[cache_key] = result
+        return result
+
+    def list_child_folders(self, parent_id: str) -> list[dict]:
+        cached = self.child_folder_cache.get(parent_id)
+        if cached is not None:
+            return cached
+        q = (
+            f"mimeType = '{FOLDER_MIME_TYPE}' and trashed = false and "
+            f"'{parent_id}' in parents"
+        )
+        params = urllib.parse.urlencode(
+            {
+                "q": q,
+                "fields": "files(id,name,webViewLink)",
+                "supportsAllDrives": "true",
+                "includeItemsFromAllDrives": "true",
+                "pageSize": "1000",
+            }
+        )
+        search_url = f"https://www.googleapis.com/drive/v3/files?{params}"
+        files = self.request("GET", search_url).get("files", [])
+        self.child_folder_cache[parent_id] = files
+        return files
+
 
 def normalize_region(region: str) -> str:
     normalized = " ".join(str(region or "").split())
@@ -261,23 +299,297 @@ def ensure_meta_header(header: list[str]) -> None:
     header[2] = "폴더ID"
 
 
-def create_apartment_folder(client: GoogleApiClient, row: list[str], idx: dict[str, int]) -> dict[str, str] | None:
+def normalize_folder_token(value: str) -> str:
+    return "".join(ch.lower() for ch in str(value or "") if ch.isalnum() or ("가" <= ch <= "힣"))
+
+
+def build_apartment_complex_name_key(data: dict[str, str]) -> str:
+    return normalize_folder_token(data.get("단지명", ""))
+
+
+def build_apartment_complex_location_key(data: dict[str, str]) -> str:
+    parts = [
+        normalize_region(data.get("시군구", "")),
+        data.get("동읍면", "").strip(),
+        data.get("통반리", "").strip(),
+        data.get("지번", "").strip(),
+        data.get("단지명", "").strip(),
+    ]
+    return "::".join(parts)
+
+
+def extract_drive_id(value: str) -> str:
+    import re
+
+    match = re.search(r"[-\w]{25,}", str(value or "").strip())
+    return match.group(0) if match else ""
+
+
+def register_apartment_complex_lookup(
+    lookup: dict[str, dict[str, str]],
+    data: dict[str, str],
+    folder: dict[str, str],
+) -> None:
+    folder_id = folder.get("id", "")
+    if not folder_id:
+        return
+
+    name_key = build_apartment_complex_name_key(data)
+    if name_key:
+        lookup[f"단지명::{name_key}"] = folder
+
+    complex_id = data.get("단지ID", "").strip()
+    if complex_id:
+        lookup[f"단지ID::{complex_id}"] = folder
+
+    location_key = build_apartment_complex_location_key(data)
+    if location_key.replace(":", ""):
+        lookup[f"주소::{location_key}"] = folder
+
+
+def resolve_apartment_complex_folder_from_leaf(
+    client: GoogleApiClient, leaf_folder_id: str
+) -> dict[str, str] | None:
+    parsed_id = extract_drive_id(leaf_folder_id)
+    if not parsed_id:
+        return None
+    try:
+        leaf = client.get_drive_file(parsed_id, "id,name,parents,webViewLink")
+        sale_parents = leaf.get("parents") or []
+        if not sale_parents:
+            return None
+        sale_folder = client.get_drive_file(sale_parents[0], "id,name,parents,webViewLink")
+        if sale_folder.get("name") != "-매물":
+            return None
+        complex_parents = sale_folder.get("parents") or []
+        if not complex_parents:
+            return None
+        complex_folder = client.get_drive_file(complex_parents[0], "id,name,webViewLink")
+        return {
+            "id": complex_folder["id"],
+            "url": complex_folder.get("webViewLink") or FOLDER_URL_PREFIX + complex_folder["id"],
+        }
+    except subprocess.CalledProcessError:
+        return None
+
+
+def build_apartment_complex_lookup(
+    client: GoogleApiClient, apartment_rows: list[list[str]], complex_rows: list[list[str]] | None = None
+) -> dict[str, dict[str, str]]:
+    lookup: dict[str, dict[str, str]] = {}
+
+    if complex_rows:
+        complex_header = complex_rows[0]
+        complex_idx = make_header_index(complex_header)
+        for row in complex_rows[1:]:
+            folder_id = get_value(row, complex_idx, "폴더ID") or get_value(row, complex_idx, "관련파일")
+            parsed_id = extract_drive_id(folder_id)
+            if not parsed_id:
+                continue
+            register_apartment_complex_lookup(
+                lookup,
+                {
+                    "시군구": get_value(row, complex_idx, "시군구"),
+                    "동읍면": get_value(row, complex_idx, "동읍면"),
+                    "통반리": get_value(row, complex_idx, "통반리"),
+                    "지번": get_value(row, complex_idx, "지번"),
+                    "단지명": get_value(row, complex_idx, "단지명"),
+                    "단지ID": get_value(row, complex_idx, "단지ID"),
+                },
+                {"id": parsed_id, "url": FOLDER_URL_PREFIX + parsed_id},
+            )
+
+    apartment_header = apartment_rows[0]
+    apartment_idx = make_header_index(apartment_header)
+    for row in apartment_rows[1:]:
+        leaf_folder_id = get_value(row, apartment_idx, "폴더ID") or get_value(row, apartment_idx, "관련파일")
+        complex_folder = resolve_apartment_complex_folder_from_leaf(client, leaf_folder_id)
+        if not complex_folder:
+            continue
+        register_apartment_complex_lookup(
+            lookup,
+            {
+                "시군구": get_value(row, apartment_idx, "시군구"),
+                "동읍면": get_value(row, apartment_idx, "동읍면"),
+                "통반리": get_value(row, apartment_idx, "통반리"),
+                "지번": get_value(row, apartment_idx, "지번"),
+                "단지명": get_value(row, apartment_idx, "단지명"),
+                "단지ID": get_value(row, apartment_idx, "단지ID"),
+            },
+            complex_folder,
+        )
+
+    return lookup
+
+
+def score_apartment_complex_candidate(candidate_name: str, data: dict[str, str]) -> int:
+    exact_target = f"{data.get('지번', '').strip()} {data.get('단지명', '').strip()}".strip()
+    exact_complex = data.get("단지명", "").strip()
+    normalized_candidate = normalize_folder_token(candidate_name)
+    normalized_target = normalize_folder_token(exact_target)
+    normalized_complex = normalize_folder_token(exact_complex)
+    normalized_short = normalize_folder_token(data.get("단지명축약", ""))
+    normalized_jibun = normalize_folder_token(data.get("지번", ""))
+
+    if candidate_name.strip() == exact_target:
+        return 100
+    if candidate_name.strip() == exact_complex:
+        return 95
+    if normalized_candidate and normalized_candidate == normalized_target:
+        return 90
+    if normalized_candidate and normalized_candidate == normalized_complex:
+        return 80
+    if normalized_short and normalized_candidate == normalized_short:
+        return 60
+    if normalized_candidate and normalized_jibun and normalized_complex and normalized_jibun in normalized_candidate and normalized_complex in normalized_candidate:
+        return 70
+    return 0
+
+
+def find_existing_apartment_complex_folder(
+    client: GoogleApiClient, parent_id: str, data: dict[str, str]
+) -> dict[str, str] | None:
+    best: dict[str, str] | None = None
+    best_score = 0
+    duplicate_count = 0
+    for candidate in client.list_child_folders(parent_id):
+        score = score_apartment_complex_candidate(candidate.get("name", ""), data)
+        if not score:
+            continue
+        current = {
+            "id": candidate["id"],
+            "url": candidate.get("webViewLink") or FOLDER_URL_PREFIX + candidate["id"],
+        }
+        if score > best_score:
+            best = current
+            best_score = score
+            duplicate_count = 1
+        elif score == best_score:
+            duplicate_count += 1
+    if not best:
+        return None
+    if duplicate_count > 1 and best_score < 90:
+        return None
+    return best
+
+
+def get_apartment_parent_folder(client: GoogleApiClient, row: list[str], idx: dict[str, int]) -> dict[str, str] | None:
     sigungu = get_value(row, idx, "시군구")
     dong = get_value(row, idx, "동읍면")
-    jibun = get_value(row, idx, "지번")
-    complex_name = get_value(row, idx, "단지명")
-    dong_no = get_value(row, idx, "동")
-    ho = get_value(row, idx, "호")
-    kind = get_value(row, idx, "타입")
-    if not all([sigungu, dong, jibun, complex_name, dong_no, ho, kind]):
+    if not sigungu or not dong:
         return None
     parent = client.get_or_create_folder(ROOT_FOLDER_ID, normalize_region(sigungu))
     parent = client.get_or_create_folder(parent["id"], dong)
     tong = get_value(row, idx, "통반리")
     if tong:
         parent = client.get_or_create_folder(parent["id"], tong)
-    parent = client.get_or_create_folder(parent["id"], f"{jibun} {complex_name}")
-    parent = client.get_or_create_folder(parent["id"], "-매물")
+    return parent
+
+
+def column_index_to_letter(index: int) -> str:
+    result = ""
+    current = index
+    while current > 0:
+        current, remainder = divmod(current - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def ensure_result_columns_for_spec(spec: SheetSpec, header: list[str]) -> tuple[int, int, list[dict]]:
+    header_updates: list[dict] = []
+
+    if spec.canonical_name == "아파트단지":
+        url_col = header.index("관련파일") + 1 if "관련파일" in header else 0
+        id_col = header.index("폴더ID") + 1 if "폴더ID" in header else 0
+        next_col = len(header) + 1
+        if url_col < 1:
+            url_col = next_col
+            header_updates.append(
+                {
+                    "range": f"{spec.sheet_name}!{column_index_to_letter(url_col)}1",
+                    "majorDimension": "ROWS",
+                    "values": [["관련파일"]],
+                }
+            )
+            next_col = url_col + 1
+        if id_col < 1:
+            id_col = next_col
+            header_updates.append(
+                {
+                    "range": f"{spec.sheet_name}!{column_index_to_letter(id_col)}1",
+                    "majorDimension": "ROWS",
+                    "values": [["폴더ID"]],
+                }
+            )
+        return url_col, id_col, header_updates
+
+    ensure_meta_header(header)
+    return 2, 3, header_updates
+
+
+def create_apartment_complex_folder(
+    client: GoogleApiClient,
+    row: list[str],
+    idx: dict[str, int],
+    apartment_lookup: dict[str, dict[str, str]],
+) -> dict[str, str] | None:
+    parent = get_apartment_parent_folder(client, row, idx)
+    if not parent:
+        return None
+
+    jibun = get_value(row, idx, "지번")
+    complex_name = get_value(row, idx, "단지명")
+    if not complex_name:
+        return None
+
+    data = {
+        "시군구": get_value(row, idx, "시군구"),
+        "동읍면": get_value(row, idx, "동읍면"),
+        "통반리": get_value(row, idx, "통반리"),
+        "지번": jibun,
+        "단지명": complex_name,
+        "단지명축약": get_value(row, idx, "단지명축약"),
+        "단지ID": get_value(row, idx, "단지ID"),
+    }
+
+    folder = None
+    name_key = build_apartment_complex_name_key(data)
+    if name_key:
+        folder = apartment_lookup.get(f"단지명::{name_key}")
+
+    if not folder and data["단지ID"]:
+        folder = apartment_lookup.get(f"단지ID::{data['단지ID']}")
+
+    if not folder:
+        folder = apartment_lookup.get(f"주소::{build_apartment_complex_location_key(data)}")
+
+    if not folder:
+        folder = find_existing_apartment_complex_folder(client, parent["id"], data)
+
+    if not folder and not jibun:
+        return None
+
+    if not folder:
+        folder = client.get_or_create_folder(parent["id"], f"{jibun} {complex_name}")
+
+    register_apartment_complex_lookup(apartment_lookup, data, folder)
+    return folder
+
+
+def create_apartment_folder(
+    client: GoogleApiClient,
+    row: list[str],
+    idx: dict[str, int],
+    apartment_lookup: dict[str, dict[str, str]],
+) -> dict[str, str] | None:
+    complex_folder = create_apartment_complex_folder(client, row, idx, apartment_lookup)
+    dong_no = get_value(row, idx, "동")
+    ho = get_value(row, idx, "호")
+    kind = get_value(row, idx, "타입")
+    if not complex_folder or not all([dong_no, ho, kind]):
+        return None
+
+    parent = client.get_or_create_folder(complex_folder["id"], "-매물")
     return client.get_or_create_folder(parent["id"], f"{dong_no}-{ho}-{kind}")
 
 
@@ -410,6 +722,7 @@ def build_updates_for_spec(
     client: GoogleApiClient,
     spec: SheetSpec,
     building_lookup: dict[str, dict[str, str]],
+    apartment_lookup: dict[str, dict[str, str]],
     row_start: int | None = None,
     row_end: int | None = None,
 ) -> tuple[list[dict], dict]:
@@ -417,9 +730,9 @@ def build_updates_for_spec(
     if not rows:
         return [], {"sheet": spec.sheet_name, "processed": 0, "created": 0, "skipped": 0}
     header = rows[0]
-    ensure_meta_header(header)
+    url_col, id_col, header_updates = ensure_result_columns_for_spec(spec, header)
     idx = make_header_index(header)
-    updates: list[dict] = []
+    updates: list[dict] = list(header_updates)
     created = 0
     skipped = 0
 
@@ -429,7 +742,7 @@ def build_updates_for_spec(
         if row_end and row_number > row_end:
             continue
 
-        url = row[1].strip() if len(row) > 1 else ""
+        url = row[url_col - 1].strip() if len(row) >= url_col else ""
         if url:
             skipped += 1
             continue
@@ -443,7 +756,9 @@ def build_updates_for_spec(
                     while len(row) <= idx["지번"]:
                         row.append("")
                     row[idx["지번"]] = inferred_jibun
-            folder = create_apartment_folder(client, row, idx)
+            folder = create_apartment_folder(client, row, idx, apartment_lookup)
+        elif spec.canonical_name == "아파트단지":
+            folder = create_apartment_complex_folder(client, row, idx, apartment_lookup)
         elif spec.canonical_name == "주택타운":
             if not get_value(row, idx, "지번"):
                 inferred_jibun = find_matching_jibun(rows, idx, row_number, "주택단지", ["시군구", "동읍면", "통반리"])
@@ -488,7 +803,7 @@ def build_updates_for_spec(
 
         updates.append(
             {
-                "range": f"{spec.sheet_name}!B{row_number}:C{row_number}",
+                "range": f"{spec.sheet_name}!{column_index_to_letter(url_col)}{row_number}:{column_index_to_letter(id_col)}{row_number}",
                 "majorDimension": "ROWS",
                 "values": [[folder["url"], folder["id"]]],
             }
@@ -516,6 +831,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     client = GoogleApiClient()
+    apartment_spec = next(spec for spec in SHEET_SPECS if spec.canonical_name == "아파트매물")
+    apartment_rows = client.get_sheet_values(apartment_spec.spreadsheet_id, apartment_spec.sheet_name)
+    apartment_complex_spec = next(spec for spec in SHEET_SPECS if spec.canonical_name == "아파트단지")
+    apartment_complex_rows = client.get_sheet_values(apartment_complex_spec.spreadsheet_id, apartment_complex_spec.sheet_name)
+    apartment_lookup = build_apartment_complex_lookup(client, apartment_rows, apartment_complex_rows)
     building_spec = next(spec for spec in SHEET_SPECS if spec.canonical_name == "건물")
     building_rows = client.get_sheet_values(building_spec.spreadsheet_id, building_spec.sheet_name)
     building_lookup = build_building_lookup(building_rows)
@@ -530,6 +850,7 @@ def main() -> int:
             client,
             spec,
             building_lookup,
+            apartment_lookup,
             row_start=args.row_start,
             row_end=args.row_end,
         )
