@@ -15,6 +15,13 @@ ROOT_FOLDER_ID = "1OhHhbs4OGvRu8174U6kqRex7if7bFbcz"
 FOLDER_URL_PREFIX = "https://drive.google.com/drive/folders/"
 ALLOWED_REGIONS = {"아산시", "천안시 서북구", "천안시 동남구"}
 FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+TYPE_ROOTS = {
+    "apartment": "01_아파트",
+    "town": "02_주택타운",
+    "building": "03_건물계열",
+    "land": "04_토지",
+    "factory": "05_공장창고",
+}
 
 
 @dataclass(frozen=True)
@@ -207,6 +214,21 @@ class GoogleApiClient:
 def normalize_region(region: str) -> str:
     normalized = " ".join(str(region or "").split())
     return normalized if normalized in ALLOWED_REGIONS else "타지역"
+
+
+def get_type_regional_parent(
+    client: GoogleApiClient,
+    type_key: str,
+    sigungu: str,
+    dong: str,
+    tong: str = "",
+) -> dict[str, str]:
+    parent = client.get_or_create_folder(ROOT_FOLDER_ID, TYPE_ROOTS[type_key])
+    parent = client.get_or_create_folder(parent["id"], normalize_region(sigungu))
+    parent = client.get_or_create_folder(parent["id"], dong)
+    if tong:
+        parent = client.get_or_create_folder(parent["id"], tong)
+    return parent
 
 
 def parse_address(address: str) -> dict[str, str] | None:
@@ -478,12 +500,13 @@ def get_apartment_parent_folder(client: GoogleApiClient, row: list[str], idx: di
     dong = get_value(row, idx, "동읍면")
     if not sigungu or not dong:
         return None
-    parent = client.get_or_create_folder(ROOT_FOLDER_ID, normalize_region(sigungu))
-    parent = client.get_or_create_folder(parent["id"], dong)
-    tong = get_value(row, idx, "통반리")
-    if tong:
-        parent = client.get_or_create_folder(parent["id"], tong)
-    return parent
+    return get_type_regional_parent(
+        client,
+        "apartment",
+        sigungu,
+        dong,
+        get_value(row, idx, "통반리"),
+    )
 
 
 def column_index_to_letter(index: int) -> str:
@@ -598,11 +621,7 @@ def create_town_folder(client: GoogleApiClient, row: list[str], idx: dict[str, i
     complex_name = get_value(row, idx, "주택단지")
     if not all([sigungu, dong, jibun, complex_name]):
         return None
-    parent = client.get_or_create_folder(ROOT_FOLDER_ID, normalize_region(sigungu))
-    parent = client.get_or_create_folder(parent["id"], dong)
-    tong = get_value(row, idx, "통반리")
-    if tong:
-        parent = client.get_or_create_folder(parent["id"], tong)
+    parent = get_type_regional_parent(client, "town", sigungu, dong, get_value(row, idx, "통반리"))
 
     house_type = get_value(row, idx, "주택유형").lower()
     dong_no = get_value(row, idx, "동")
@@ -642,10 +661,13 @@ def create_building_folder(
     deal_type: str,
     room_type: str,
 ) -> dict[str, str]:
-    parent = client.get_or_create_folder(ROOT_FOLDER_ID, normalize_region(location["시군구"]))
-    parent = client.get_or_create_folder(parent["id"], location["동읍면"])
-    if location.get("통반리"):
-        parent = client.get_or_create_folder(parent["id"], location["통반리"])
+    parent = get_type_regional_parent(
+        client,
+        "building",
+        location["시군구"],
+        location["동읍면"],
+        location.get("통반리", ""),
+    )
     building_folder = client.get_or_create_folder(parent["id"], f"{location['지번']} {building_name}")
     sale_folder = client.get_or_create_folder(building_folder["id"], "-매물")
 
@@ -671,11 +693,7 @@ def create_land_folder(client: GoogleApiClient, row: list[str], idx: dict[str, i
     category = get_value(row, idx, "토지분류")
     if not all([sigungu, dong, jibun, category]):
         return None
-    parent = client.get_or_create_folder(ROOT_FOLDER_ID, normalize_region(sigungu))
-    parent = client.get_or_create_folder(parent["id"], dong)
-    tong = get_value(row, idx, "통반리")
-    if tong:
-        parent = client.get_or_create_folder(parent["id"], tong)
+    parent = get_type_regional_parent(client, "land", sigungu, dong, get_value(row, idx, "통반리"))
     return client.get_or_create_folder(parent["id"], f"{jibun} {category}")
 
 
@@ -686,11 +704,7 @@ def create_factory_folder(client: GoogleApiClient, row: list[str], idx: dict[str
     name = get_value(row, idx, "명칭")
     if not all([sigungu, dong, jibun, name]):
         return None
-    parent = client.get_or_create_folder(ROOT_FOLDER_ID, normalize_region(sigungu))
-    parent = client.get_or_create_folder(parent["id"], dong)
-    tong = get_value(row, idx, "통반리")
-    if tong:
-        parent = client.get_or_create_folder(parent["id"], tong)
+    parent = get_type_regional_parent(client, "factory", sigungu, dong, get_value(row, idx, "통반리"))
     return client.get_or_create_folder(parent["id"], f"{jibun} {name}")
 
 
