@@ -6,6 +6,7 @@
 
 ```text
 apps-script/
+├── apartment-entry-automation/
 ├── property-folder-automation/
 │   ├── appsscript.json
 │   ├── g-drive-folder-create.js
@@ -17,6 +18,27 @@ apps-script/
 ```
 
 ## Main Directories
+
+### `apartment-entry-automation/`
+
+`아파트등록` 입력시트 재구축용 Apps Script 소스다.
+
+핵심 파일:
+
+- `appsscript.json`
+- `entry-form.js`
+- `price-helper.js`
+
+주요 함수:
+
+- `initializePriceModelSheets()`
+- `rebuildPriceHelper()`
+- `showPriceHelperDiagnostics()`
+- `lookupPriceFromHelper_(complexId, typeName, dong, ho)`
+
+상세 설계 문서:
+
+- `../docs/apps-script/apartment-entry-price-model.md`
 
 ### `property-folder-automation/`
 
