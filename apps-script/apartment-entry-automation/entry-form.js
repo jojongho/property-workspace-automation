@@ -134,7 +134,7 @@ function onEdit(e) {
 
   if (a1 === ENTRY_AUTOMATION.fieldCells.동 || a1 === ENTRY_AUTOMATION.fieldCells.호) {
     clearLoadedPropertyMeta_();
-    recalculateEntryForm_({ forcePriceLookup: true });
+    refreshTypePanel_({ forcePriceLookup: true, preserveSelections: false });
     return;
   }
 
@@ -620,7 +620,142 @@ function updateComplexValidation_() {
 
 function updateTypeValidation_() {
   var formSheet = getRequiredSheet_(ENTRY_AUTOMATION.sheets.form);
-  var complexName = normalizeCellString_(formSheet.getRange(ENTRY_AUTOMATION.fieldCells.단지명).getValue());
+  var typeRange = formSheet.getRange(ENTRY_AUTOMATION.fieldCells.타입);
+  var formData = readFormFields_();
+  var typeNames = getTypeCandidatesForForm_(formData);
+  var currentType = normalizeCellString_(typeRange.getValue());
+
+  applyListValidation_(typeRange, typeNames);
+
+  if (!typeNames.length) {
+    if (currentType) {
+      typeRange.clearContent();
+    }
+    return;
+  }
+
+  if (typeNames.length === 1) {
+    if (currentType !== typeNames[0]) {
+      typeRange.setValue(typeNames[0]);
+    }
+    return;
+  }
+
+  if (currentType && typeNames.indexOf(currentType) === -1) {
+    typeRange.clearContent();
+  }
+}
+
+function getTypeCandidatesForForm_(formData) {
+  var complexName = normalizeCellString_(formData['단지명']);
+  if (!complexName) {
+    return [];
+  }
+
+  var complexInfo = getComplexInfoByName_(complexName);
+  var complexId = complexInfo ? normalizeCellString_(complexInfo['단지ID']) : '';
+  var dong = normalizeCellString_(formData['동']);
+  var ho = normalizeCellString_(formData['호']);
+  var helperCandidates = getTypeCandidatesFromHelper_(complexId, dong, ho);
+  if (helperCandidates.length) {
+    return helperCandidates;
+  }
+
+  var legacyCandidates = getTypeCandidatesFromLegacySalePrice_(complexName, dong, ho);
+  if (legacyCandidates.length) {
+    return legacyCandidates;
+  }
+
+  return getTypeCandidatesFromTypeSheet_(complexName);
+}
+
+function getTypeCandidatesFromHelper_(complexId, dong, ho) {
+  if (!complexId || !dong || !ho) {
+    return [];
+  }
+
+  var normalizedDong;
+  var hoParts;
+  try {
+    normalizedDong = normalizeDongLookupValue_(dong);
+    hoParts = parseHoForLookup_(ho);
+  } catch (error) {
+    return [];
+  }
+
+  var helperIndex;
+  try {
+    helperIndex = getPriceHelperIndex_(SpreadsheetApp.getActiveSpreadsheet());
+  } catch (error) {
+    return [];
+  }
+
+  var seen = {};
+  var typeNames = [];
+  var helperKeys = Object.keys(helperIndex);
+
+  for (var i = 0; i < helperKeys.length; i++) {
+    var row = helperIndex[helperKeys[i]];
+    if (
+      normalizeCellString_(row.complexId) !== complexId ||
+      normalizeCellString_(row.dong) !== normalizedDong ||
+      normalizeCellString_(row.line) !== hoParts.line ||
+      normalizeCellString_(row.floor) !== hoParts.floor
+    ) {
+      continue;
+    }
+
+    var typeName = normalizeCellString_(row.typeName);
+    if (!typeName || seen[typeName]) {
+      continue;
+    }
+
+    seen[typeName] = true;
+    typeNames.push(typeName);
+  }
+
+  typeNames.sort();
+  return typeNames;
+}
+
+function getTypeCandidatesFromLegacySalePrice_(complexName, dong, ho) {
+  if (!complexName || !dong || !ho) {
+    return [];
+  }
+
+  var rows = getSheetObjects_(ENTRY_AUTOMATION.sheets.salePrice);
+  var normalizedDong = '';
+  try {
+    normalizedDong = normalizeDongLookupValue_(dong);
+  } catch (error) {
+    return [];
+  }
+
+  var seen = {};
+  var typeNames = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (
+      normalizeCellString_(rows[i]['단지명']) !== complexName ||
+      normalizeCellString_(rows[i]['동']) !== normalizedDong ||
+      normalizeCellString_(rows[i]['호']) !== normalizeCellString_(ho)
+    ) {
+      continue;
+    }
+
+    var typeName = normalizeCellString_(rows[i]['타입']);
+    if (!typeName || seen[typeName]) {
+      continue;
+    }
+
+    seen[typeName] = true;
+    typeNames.push(typeName);
+  }
+
+  typeNames.sort();
+  return typeNames;
+}
+
+function getTypeCandidatesFromTypeSheet_(complexName) {
   var typeRows = getSheetObjects_(ENTRY_AUTOMATION.sheets.type);
   var typeNames = [];
   var seen = {};
@@ -629,16 +764,18 @@ function updateTypeValidation_() {
     if (normalizeCellString_(typeRows[i]['단지명']) !== complexName) {
       continue;
     }
+
     var typeName = normalizeCellString_(typeRows[i]['약식표기']);
     if (!typeName || seen[typeName]) {
       continue;
     }
+
     seen[typeName] = true;
     typeNames.push(typeName);
   }
 
   typeNames.sort();
-  applyListValidation_(formSheet.getRange(ENTRY_AUTOMATION.fieldCells.타입), typeNames);
+  return typeNames;
 }
 
 function getComplexInfoByName_(complexName) {

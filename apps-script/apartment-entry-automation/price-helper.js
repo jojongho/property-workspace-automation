@@ -269,7 +269,8 @@ function rebuildPriceHelper() {
   writeSheetWithHeaders_(errorSheet, PRICE_MODEL.errorHeaders, errors);
   errorSheet.hideSheet();
 
-  if (errors.length > 0) {
+  var hasBlockingErrors = hasBlockingPriceHelperErrors_(errors);
+  if (hasBlockingErrors) {
     clearPriceHelperCache_(spreadsheet.getId());
     SpreadsheetApp.getUi().alert(
       '가격 helper 생성에 실패했습니다.\n오류 ' +
@@ -279,13 +280,33 @@ function rebuildPriceHelper() {
     return {
       ok: false,
       helperRowCount: helperRows.length,
-      errorCount: errors.length
+      errorCount: errors.length,
+      partial: false,
+      hasBlockingErrors: true
     };
   }
 
   writeSheetWithHeaders_(helperSheet, PRICE_MODEL.helperHeaders, helperRows);
   helperSheet.hideSheet();
   clearPriceHelperCache_(spreadsheet.getId());
+
+  if (errors.length > 0) {
+    SpreadsheetApp.getUi().alert(
+      '가격 helper를 부분 재생성했습니다.\n생성 행 수: ' +
+      helperRows.length +
+      '\n오류 행 수: ' +
+      errors.length +
+      '\n분양가_helper_errors 시트를 확인해주세요.'
+    );
+
+    return {
+      ok: true,
+      helperRowCount: helperRows.length,
+      errorCount: errors.length,
+      partial: true,
+      hasBlockingErrors: false
+    };
+  }
 
   SpreadsheetApp.getUi().alert(
     '가격 helper를 재생성했습니다.\n생성 행 수: ' + helperRows.length
@@ -294,7 +315,9 @@ function rebuildPriceHelper() {
   return {
     ok: true,
     helperRowCount: helperRows.length,
-    errorCount: 0
+    errorCount: 0,
+    partial: false,
+    hasBlockingErrors: false
   };
 }
 
@@ -337,6 +360,30 @@ function showPriceHelperDiagnostics() {
     errorRowCount: errorLastRow,
     generatedAt: lastGeneratedAt || ''
   };
+}
+
+/**
+ * Custom function for spreadsheet cells.
+ *
+ * Example:
+ * =LOOKUP_APARTMENT_PRICE("CPX_001","84A","102","2504")
+ */
+function LOOKUP_APARTMENT_PRICE(complexId, typeName, dong, ho) {
+  if (
+    !normalizeCellString_(complexId) ||
+    !normalizeCellString_(typeName) ||
+    !normalizeCellString_(dong) ||
+    !normalizeCellString_(ho)
+  ) {
+    return '';
+  }
+
+  try {
+    var row = lookupPriceFromHelper_(complexId, typeName, dong, ho);
+    return row ? row.salePrice : '';
+  } catch (error) {
+    return 'PRICE_LOOKUP_ERROR: ' + error.message;
+  }
 }
 
 function lookupPriceFromHelper_(complexId, typeName, dong, ho) {
@@ -499,6 +546,20 @@ function writeSheetWithHeaders_(sheet, headers, rows) {
   if (rows.length > 0) {
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   }
+}
+
+function hasBlockingPriceHelperErrors_(errors) {
+  for (var i = 0; i < errors.length; i++) {
+    var errorType = normalizeCellString_(errors[i][0]);
+    if (
+      errorType === PRICE_MODEL.errorTypes.duplicateSourceId ||
+      errorType === PRICE_MODEL.errorTypes.duplicateHelperKey
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function parseDongTokens_(dongRaw) {

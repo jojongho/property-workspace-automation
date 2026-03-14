@@ -12,6 +12,7 @@
 
 ## Functions
 
+- `LOOKUP_APARTMENT_PRICE(complexId, typeName, dong, ho)`
 - `initializePriceModelSheets()`
 - `rebuildPriceHelper()`
 - `showPriceHelperDiagnostics()`
@@ -34,4 +35,5 @@ python3 scripts/gws_push_apps_script_project.py --script-id <SCRIPT_ID> --verify
 
 - `분양가_source`는 사람이 직접 수정한다.
 - `분양가_helper`, `분양가_helper_errors`는 스크립트가 관리한다.
+- 시트 셀에서는 `=LOOKUP_APARTMENT_PRICE(단지ID, 타입, 동, 호)`로 helper 기반 분양가 조회가 가능하다.
 - 세부 규칙은 `../../docs/apps-script/apartment-entry-price-model.md`를 따른다.

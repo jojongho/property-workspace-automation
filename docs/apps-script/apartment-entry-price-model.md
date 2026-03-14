@@ -198,9 +198,10 @@ G  logged_at
 4. 각 row의 `동_raw`, `라인_raw`, `층_from`, `층_to`를 파싱한다.
 5. `동 x 라인 x 층`의 카티전 곱으로 helper row를 메모리에서 생성한다.
 6. `helper_key` 중복 여부를 검사한다.
-7. 오류가 하나라도 있으면 `분양가_helper`는 덮어쓰지 않고 `분양가_helper_errors`만 갱신한다.
-8. 오류가 없을 때만 `분양가_helper` 전체를 일괄 재작성한다.
-9. 마지막에 `generated_at`을 같은 시각으로 채운다.
+7. `MISSING_REQUIRED`, `INVALID_DONG_TOKEN`, `INVALID_LINE_TOKEN`, `INVALID_FLOOR_RANGE`, `MISSING_KEY_PART` 같은 row 단위 오류는 `분양가_helper_errors`에 기록하고 해당 row만 제외한다.
+8. `DUPLICATE_SOURCE_ID`, `DUPLICATE_HELPER_KEY` 같은 충돌 오류가 있으면 `분양가_helper`는 덮어쓰지 않고 `분양가_helper_errors`만 갱신한다.
+9. 충돌 오류가 없으면 유효 row만 모아 `분양가_helper` 전체를 일괄 재작성한다.
+10. 마지막에 `generated_at`을 같은 시각으로 채운다.
 
 ## Duplicate Policy
 
@@ -243,10 +244,21 @@ G  logged_at
 
 즉, 입력폼은 `호`를 그대로 helper에 넣지 않고 `층`과 `라인`으로 분해해서 조회한다.
 
+시트 셀에서 바로 쓰는 가장 단순한 조회식은 custom function 하나로 고정한다.
+
+```gs
+=LOOKUP_APARTMENT_PRICE(단지ID셀, 타입셀, 동셀, 호셀)
+```
+
+- 내부적으로 `분양가_helper`를 exact lookup 한다.
+- 조회 결과는 `분양가` 숫자 하나만 반환한다.
+- helper miss면 빈 값을 반환한다.
+
 ## Apps Script Functions
 
 가격 helper 전환 단계에서 필요한 함수는 아래로 고정한다.
 
+- `LOOKUP_APARTMENT_PRICE(complexId, typeName, dong, ho)`
 - `rebuildPriceHelper()`
 - `showPriceHelperDiagnostics()`
 - `lookupPriceFromHelper_(complexId, typeName, dong, ho)`
@@ -259,7 +271,8 @@ G  logged_at
 
 - helper 생성은 row 단위 `setValue()`를 금지한다.
 - 전체 결과를 배열로 만든 뒤 `setValues()` 한 번으로 쓴다.
-- 에러가 있으면 helper 본문은 유지하고 errors 시트만 갱신한다.
+- row 단위 파싱 오류는 errors 시트에만 남기고 helper 본문은 유효 row 기준으로 재작성한다.
+- `DUPLICATE_SOURCE_ID`, `DUPLICATE_HELPER_KEY`가 있으면 helper 본문은 유지하고 errors 시트만 갱신한다.
 - helper row 수가 커져도 조회는 exact lookup이므로 입력폼 쪽 비용은 낮다.
 
 ## Migration Plan

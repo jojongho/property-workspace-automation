@@ -40,6 +40,9 @@ property-workspace-automation/
 - `scripts/gws_export_apps_script_project.py`
 - `scripts/gws_create_apps_script_project.py`
 - `scripts/gws_analyze_property_folder.py`
+- `scripts/apartment_price_normalizer.py`
+- `scripts/legacy_price_normalizer.py`
+- `scripts/sync_apartment_price_source_sheet.py`
 - `scripts/backfill_property_folder_links.py`
 - `scripts/migrate_drive_folder_tree.py`
 - `scripts/cleanup_empty_legacy_drive_folders.py`
@@ -67,6 +70,7 @@ make check
 - `python3 scripts/gws_push_apps_script_project.py --script-id <SCRIPT_ID> --verify`
 - `python3 scripts/gws_export_apps_script_project.py --script-id <SCRIPT_ID> --output-dir /tmp/exported-apps-script`
 - `python3 scripts/gws_analyze_property_folder.py --folder-id <FOLDER_ID>`
+- `python3 scripts/sync_apartment_price_source_sheet.py --folder-id <FOLDER_ID> --master-sheet-id <SHEET_ID> --dry-run`
 - `python3 scripts/backfill_property_folder_links.py --canonical-sheet 건물 --row-start 2 --row-end 60`
 - `python3 scripts/migrate_drive_folder_tree.py --summary-only`
 - `python3 scripts/cleanup_empty_legacy_drive_folders.py`
@@ -82,4 +86,5 @@ make check
 - `gws` CLI 인증이 선행돼야 한다.
 - `gws` 인증/연동을 위한 비밀키는 로컬 환경에서만 관리한다.
 - Apps Script 대량 복구는 편집기 실행보다 로컬 Python 스크립트를 우선 사용한다.
+- `분양가_source` 생성용 정규화 브리지는 이 저장소 `scripts/`에서 관리한다.
 - 기존 Drive 폴더 데이터 이동은 삭제가 아니라 부모 변경과 병합 방식으로 처리한다.

@@ -14,6 +14,8 @@ install: venv
 
 check: install
 	$(PY) -m py_compile scripts/*.py
+	$(PY) -m unittest discover -s tests
+	node --check apps-script/apartment-entry-automation/price-helper.js
 	node --check apps-script/property-folder-automation/g-drive-folder-create.js
 	node --check apps-script/property-folder-automation/g-drive-folder.js
 
