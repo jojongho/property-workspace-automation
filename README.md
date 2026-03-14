@@ -44,6 +44,12 @@ property-workspace-automation/
 - `scripts/migrate_drive_folder_tree.py`
 - `scripts/cleanup_empty_legacy_drive_folders.py`
 
+## Requirements
+
+- Python 3.x
+- `gws` CLI (Google Workspace CLI)
+- Apps Script 배포 권한 및 Drive/Sheets 접근 권한
+
 ## Quick Start
 
 ```bash
@@ -74,5 +80,6 @@ make check
 ## Notes
 
 - `gws` CLI 인증이 선행돼야 한다.
+- `gws` 인증/연동을 위한 비밀키는 로컬 환경에서만 관리한다.
 - Apps Script 대량 복구는 편집기 실행보다 로컬 Python 스크립트를 우선 사용한다.
 - 기존 Drive 폴더 데이터 이동은 삭제가 아니라 부모 변경과 병합 방식으로 처리한다.
