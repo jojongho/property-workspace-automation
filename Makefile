@@ -16,6 +16,7 @@ check: install
 	$(PY) -m py_compile scripts/*.py
 	node --check apps-script/property-folder-automation/g-drive-folder-create.js
 	node --check apps-script/property-folder-automation/g-drive-folder.js
+	@for f in apps-script/public-data-entry/*.js; do node --check "$$f"; done
 
 run:
 	@echo "No persistent server in this repo."
