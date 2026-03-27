@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make check:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(cp \"apps-script/webapp-multi-complex/탕정자이메트로시티동적폼/Code.gs\" /tmp/check.js)",
+      "Bash(node --check /tmp/check.js)",
+      "Bash(rm /tmp/check.js)"
+    ]
+  }
+}
